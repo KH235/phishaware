@@ -1,0 +1,416 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Scan History | PhishAware</title>
+
+    <style>
+      .back-link {
+            display: inline-block;
+            color: #c59bff;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 10px 14px;
+            border: 1px solid #a66bff;
+            border-radius: 6px;
+            background: rgba(166, 107, 255, 0.08);
+            transition: 0.2s ease;
+        }
+
+        .back-link:hover {
+            background: #a66bff;
+            color: #090b0f;
+            box-shadow: 0 0 12px rgba(166, 107, 255, 0.35);
+        }
+
+
+            .delete-dialog {
+                background: #11141c;
+                color: #e6ffe9;
+                border: 1px solid #a66bff;
+                border-radius: 12px;
+                padding: 28px;
+                width: min(400px, 85vw);
+                box-shadow: 0 0 35px rgba(166, 107, 255, 0.2);
+                font-family: Consolas, monospace;
+            }
+
+            .delete-dialog::backdrop {
+                background: rgba(0, 0, 0, 0.8);
+            }
+
+            .delete-dialog h2 {
+                color: #c59bff;
+                font-size: 19px;
+            }
+
+            .delete-warning {
+                color: #ff6677;
+                font-size: 13px;
+            }
+
+            .dialog-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
+                margin-top: 24px;
+            }
+
+            .btn-confirm-delete {
+                background: #ff6677;
+                color: #090b0f;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-family: inherit;
+                font-weight: bold;
+                cursor: pointer;
+            }
+
+            .btn-confirm-delete:hover {
+                background: #ff8895;
+            }
+
+        body {
+            background: #090b0f;
+            color: #e6ffe9;
+            font-family: Consolas, monospace;
+            margin: 0;
+            padding: 30px;
+        }
+
+        h1 {
+            color: #39ff88;
+        }
+
+        a {
+            color: #39ff88;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+        }
+
+        th, td {
+            padding: 14px;
+            border-bottom: 1px solid #28312c;
+            text-align: left;
+            overflow-wrap: anywhere;
+        }
+
+
+        th:first-child,
+        td:first-child {
+            min-width: 45px;
+            white-space: nowrap;
+            overflow-wrap: normal;
+        }
+
+        th {
+            background: #17201b;
+            color: #39ff88;
+        }
+
+        .HIGH {
+            color: #ff5555;
+        }
+
+        .MEDIUM {
+            color: #ffcc44;
+        }
+
+        .LOW {
+            color: #39ff88;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+
+.notes-display {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.notes-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+
+.notes-form[hidden],
+.notes-display[hidden] {
+    display: none !important;
+}
+
+
+.btn-edit {
+    background: rgba(155, 89, 255, 0.10);
+    color: #c59bff;
+    border: 1px solid #a66bff;
+    padding: 7px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: 0.2s ease;
+}
+
+.btn-edit:hover {
+    background: #a66bff;
+    color: #090b0f;
+    box-shadow: 0 0 12px rgba(166, 107, 255, 0.4);
+}
+
+
+.btn-save {
+    background: #39ff88;
+    color: #07100b;
+    border: 1px solid #39ff88;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-cancel {
+    background: #252a30;
+    color: #dddddd;
+    border: 1px solid #555;
+    padding: 7px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.notes-form input {
+    background: #111820;
+    color: white;
+    border: 1px solid #39ff88;
+    padding: 8px;
+    border-radius: 5px;
+    max-width: 220px;
+}
+
+.btn-save:hover {
+    box-shadow: 0 0 10px #39ff8866;
+}
+
+
+.btn-delete {
+    background: rgba(255, 75, 90, 0.10);
+    color: #ff6677;
+    border: 1px solid #ff6677;
+    padding: 7px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: 0.2s ease;
+}
+
+.btn-delete:hover {
+    background: #ff6677;
+    color: #090b0f;
+    box-shadow: 0 0 12px rgba(255, 102, 119, 0.35);
+}
+
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <a href="/" class="back-link">← Back to PhishAware</a>
+
+    <h1>URL Scan History</h1>
+
+    <p>Recently saved URL scan records.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>URL</th>
+                    <th>Risk Score</th>
+                    <th>Risk Level</th>
+                    <th>Notes</th>
+                    <th>Scanned At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for scan in scans %}
+                <tr>
+                    <td>{{ scan.scan_id }}</td>
+                    <td>{{ scan.url }}</td>
+                    <td>{{ scan.risk_score }}/100</td>
+                    <td class="{{ scan.risk_level }}">
+                        {{ scan.risk_level }}
+                    </td>
+
+
+<td>
+    <div class="notes-display" id="display-{{ scan.scan_id }}">
+        <span>{{ scan.scan_notes or 'No notes yet' }}</span>
+
+        <button type="button"
+                class="btn-edit"
+                data-scan-id="{{ scan.scan_id }}"
+                onclick="toggleNotes(this.dataset.scanId, true)">
+            ✎ Edit Notes
+        </button>
+
+    </div>
+
+    <form method="POST"
+          action="{{ url_for('update_scan_notes', scan_id=scan.scan_id) }}"
+          class="notes-form"
+          id="form-{{ scan.scan_id }}"
+          hidden>
+
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text"
+               name="scan_notes"
+               value="{{ scan.scan_notes or '' }}"
+               maxlength="1000"
+               placeholder="Enter your notes">
+
+        <button type="submit" class="btn-save">
+            ✓ Save Changes
+        </button>
+
+        <button type="button"
+        class="btn-cancel"
+        data-scan-id="{{ scan.scan_id }}"
+        onclick="toggleNotes(this.dataset.scanId, false)">
+    Cancel
+</button>
+    </form>
+</td>
+
+
+                    <td>{{ scan.scanned_at }}</td>
+
+<td>
+
+
+<form method="POST"
+      action="{{ url_for('delete_scan', scan_id=scan.scan_id) }}"
+      class="delete-form">
+
+    <!-- CSRF security token -->
+    <input type="hidden"
+           name="csrf_token"
+           value="{{ csrf_token() }}">
+
+    <button type="button"
+            class="btn-delete"
+            onclick="openDeleteDialog(this)">
+        🗑 Delete
+    </button>
+
+</form>
+
+
+</td>
+
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7">
+                        No saved scans found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+function toggleNotes(scanId, editing) {
+    const display = document.getElementById('display-' + scanId);
+    const form = document.getElementById('form-' + scanId);
+
+    display.hidden = editing;
+    form.hidden = !editing;
+
+    if (editing) {
+        form.querySelector('input[name="scan_notes"]').focus();
+    } else {
+        form.reset();
+    }
+}
+</script>
+
+
+<dialog id="delete-dialog" class="delete-dialog">
+    <h2>⚠ PhishAware Security Console</h2>
+
+    <p>
+        Are you sure you want to permanently
+        delete this scan record?
+    </p>
+
+    <p class="delete-warning">
+        This action cannot be undone.
+    </p>
+
+    <div class="dialog-actions">
+        <button type="button"
+                class="btn-cancel"
+                onclick="closeDeleteDialog()">
+            Cancel
+        </button>
+
+        <button type="button"
+                class="btn-confirm-delete"
+                onclick="confirmDelete()">
+            Yes, Delete
+        </button>
+    </div>
+</dialog>
+
+<script>
+let selectedDeleteForm = null;
+
+function openDeleteDialog(button) {
+    selectedDeleteForm = button.closest('form');
+    document.getElementById('delete-dialog').showModal();
+}
+
+function closeDeleteDialog() {
+    document.getElementById('delete-dialog').close();
+    selectedDeleteForm = null;
+}
+
+function confirmDelete() {
+    if (selectedDeleteForm) {
+        selectedDeleteForm.requestSubmit();
+    }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2639 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSRF protection for JavaScript requests -->
+
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <title>PhishAware | Threat Intelligence</title>
+
+    <link
+
+        rel="stylesheet"
+
+        href="{{ url_for('static', filename='css/style.css') }}"
+
+    >
+
+</head>
+
+<body>
+
+    <!-- TOP HEADER -->
+
+    <header class="top">
+
+        <a href="{{ url_for('home') }}" class="brand">
+
+            <span class="prompt">&gt;_</span>
+
+            PhishAware<span class="cursor">_</span>
+
+        </a>
+
+        <span class="tagline">
+
+            // UNDERGROUND THREAT INTELLIGENCE COMMUNITY
+
+        </span>
+
+        <span class="online">
+
+            <span class="dot"></span>
+
+            SYSTEM ONLINE
+
+        </span>
+
+        <span class="version">v0.1.0</span>
+
+    </header>
+
+    <div class="shell">
+
+        <!-- SIDEBAR -->
+
+        <aside class="sidebar">
+
+            <!-- AUTHENTICATION BUTTONS -->
+
+            <div class="sidebar-auth">
+
+                {% if current_user.is_authenticated %}
+
+                    <!-- Show Logout when logged in -->
+
+                    <form
+
+                        method="POST"
+
+                        action="{{ url_for('logout') }}"
+
+                    >
+
+                        <input
+
+                            type="hidden"
+
+                            name="csrf_token"
+
+                            value="{{ csrf_token() }}"
+
+                        >
+
+                        <button
+
+                            type="submit"
+
+                            class="auth-btn logout-btn"
+
+                        >
+
+                            ⏻ &nbsp; Logout
+
+                        </button>
+
+                    </form>
+
+                {% else %}
+
+                    <!-- Show Login and Sign Up for guests -->
+
+                    <a
+
+                        href="{{ url_for('login') }}"
+
+                        class="auth-btn login-btn"
+
+                    >
+
+                        ⇥ &nbsp; Login
+
+                    </a>
+
+                    <a
+
+                        href="{{ url_for('register') }}"
+
+                        class="auth-btn register-btn"
+
+                    >
+
+                        ✚ &nbsp; Sign Up
+
+                    </a>
+
+                {% endif %}
+
+            </div>
+
+            <!-- MAIN NAVIGATION -->
+
+
+<nav aria-label="Main navigation">
+
+    <a class="active" href="#dashboard">
+        ⌂ &nbsp; Dashboard
+    </a>
+
+    <a href="#scanner">
+        ⌕ &nbsp; URL Scanner
+    </a>
+
+    <a href="#intel">
+        ▤ &nbsp; Threat Database
+    </a>
+
+    <a href="#community">
+        ◉ &nbsp; Community Feed
+    </a>
+
+    <a href="#incident-reports">
+        ⚠ &nbsp; Incident Reports
+    </a>
+
+    <a href="#threat-verification">
+        ◇ &nbsp; Threat Verification
+    </a>
+
+    <a href="#cyber-learning">
+        ▱ &nbsp; Cyber Learning
+    </a>
+
+    <a href="#security-quiz">
+        ☷ &nbsp; Security Quiz
+    </a>
+
+</nav>
+
+
+            <!-- SIDEBAR FOOTER -->
+
+            <div class="sidebar-foot">
+
+                <span class="dot"></span>
+
+                LOCAL DEMO NODE
+
+                <br>
+
+                <small>NO LIVE THREAT FEED</small>
+
+            </div>
+
+        </aside>
+
+        <!-- MAIN DASHBOARD -->
+
+        <main id="dashboard">
+
+            <!-- HERO SECTION -->
+
+            <section class="hero">
+
+                <div class="hero-text">
+
+                    <div class="corner">┌</div>
+
+                    <div class="eyebrow">
+
+                        [ ACCESS GRANTED // COMMUNITY NODE ]
+
+                    </div>
+
+                    <h1>
+
+                        <span>&gt;</span>
+
+                        PHISHAWARE<span class="cursor">_</span>
+
+                    </h1>
+
+                    <h2>Scan. Report. Share. Protect.</h2>
+
+                    <p>
+
+                        A community-driven platform for identifying
+
+                        and discussing potential phishing threats.
+
+                    </p>
+
+                    <div class="corner bottom">└</div>
+
+                </div>
+
+                <div class="ghost" aria-hidden="true">
+
+                    <pre>
+
+0101011010
+
+  ░▓████▓░
+
+ ░████████░
+
+ ▓██░  ░██▓
+
+ ▓██░  ░██▓
+
+  ░▓████▓░
+
+  00110110</pre>
+
+                </div>
+
+            </section>
+
+            <!-- URL SCANNER -->
+
+            <section class="scanner panel" id="scanner">
+
+                <div class="scanner-header">
+
+                    <h3>
+
+                        <span>&gt;</span> Scan a Suspicious URL
+
+                    </h3>
+
+                    <a href="{{ url_for('scan_history') }}" class="scan-history-btn">
+
+                        ▤ View Scan History
+
+                    </a>
+
+                </div>
+
+                <form id="scan-form">
+
+                    <label class="sr-only" for="url">
+
+                        URL to scan
+
+                    </label>
+
+                    <input
+
+                        id="url"
+
+                        name="url"
+
+                        type="text"
+
+                        placeholder="Enter a URL (e.g. https://example.com)"
+
+                        maxlength="2048"
+
+                        required
+
+                    >
+
+                    <button type="submit" id="scan-btn">
+
+                        &gt; Analyze
+
+                    </button>
+
+                </form>
+
+                <p class="subtle">
+
+                    Offline URL-pattern analysis only.
+
+                    No website is visited.
+
+                </p>
+
+                <div
+
+                    id="scan-result"
+
+                    class="scan-result"
+
+                    aria-live="polite"
+
+                    hidden
+
+                ></div>
+
+            </section>
+
+            <!-- THREAT DATABASE -->
+
+            <section class="panel dashboard-section" id="intel">
+
+                <div class="panel-heading">
+
+                    <h3>
+
+                        <span class="green">▥</span>
+
+                        Threat Database
+
+                    </h3>
+                </div>
+
+    <!-- MODULE 2: ADD THREAT FORM -->
+
+    <p class="subtle threat-intro">
+
+        Help the PhishAware community by reporting suspicious
+
+        URLs and potential phishing threats.
+
+    </p>
+
+    {% if current_user.is_authenticated %}
+
+    <details class="threat-create-toggle">
+    <summary>＋ Report a New Threat</summary>
+    <form
+
+        method="POST"
+
+        action="{{ url_for('add_threat') }}"
+
+        class="threat-form"
+
+    >
+
+        <!-- CSRF protection -->
+
+        <input
+
+            type="hidden"
+
+            name="csrf_token"
+
+            value="{{ csrf_token() }}"
+
+        >
+
+        <label for="threat-url">Suspicious URL</label>
+
+        <input
+
+            type="url"
+
+            id="threat-url"
+
+            name="url"
+
+            placeholder="https://suspicious-example.com"
+
+            maxlength="2048"
+
+            required
+
+        >
+
+        <label for="threat-type">Threat Type</label>
+
+        <select id="threat-type" name="threat_type" required>
+
+            <option value="">Select a threat type</option>
+
+            <option value="Phishing">Phishing</option>
+
+            <option value="Fake Login Page">Fake Login Page</option>
+
+            <option value="Scam Website">Scam Website</option>
+
+            <option value="Malware Distribution">Malware Distribution</option>
+
+            <option value="Other">Other</option>
+
+        </select>
+
+        <label for="threat-risk">Risk Level</label>
+
+        <select id="threat-risk" name="risk_level" required>
+
+            <option value="">Select risk level</option>
+
+            <option value="LOW">LOW</option>
+
+            <option value="MEDIUM">MEDIUM</option>
+
+            <option value="HIGH">HIGH</option>
+
+        </select>
+
+        <label for="threat-description">Description</label>
+
+        <textarea
+
+            id="threat-description"
+
+            name="description"
+
+            rows="4"
+
+            maxlength="2000"
+
+            placeholder="Describe why this URL appears suspicious..."
+
+        ></textarea>
+
+        <button type="submit" class="threat-submit-btn">
+
+            + Submit Threat Report
+
+        </button>
+
+    </form>
+
+    </details>
+
+    {% else %}
+
+    <p class="threat-login-message">
+
+        <a href="{{ url_for('login') }}">
+
+            Login
+
+        </a>
+
+        or
+
+        <a href="{{ url_for('register') }}">
+
+            Sign Up
+
+        </a>
+
+        to submit a threat report.
+
+    </p>
+
+    {% endif %}
+
+<!-- MODULE 2: COMMUNITY THREAT RECORDS -->
+
+<div class="threat-records">
+
+    <div class="threat-records-header">
+
+        <h3>▤ Community Threat Records</h3>
+
+        <span>{{ threats|length }} RECORDS</span>
+
+    </div>
+
+    {% if threats %}
+
+<!-- Threat Search and Filter -->
+
+<div class="threat-search-controls">
+
+    <input
+
+        type="search"
+
+        id="threat-search"
+
+        placeholder="⌕ Search URLs, threat types, keywords..."
+
+        aria-label="Search community threats"
+
+    >
+
+    <select id="threat-risk-filter" aria-label="Filter threats by risk level">
+
+        <option value="ALL">All Risk Levels</option>
+
+        <option value="HIGH">High Risk</option>
+
+        <option value="MEDIUM">Medium Risk</option>
+
+        <option value="LOW">Low Risk</option>
+
+    </select>
+
+</div>
+
+<p id="threat-search-count" class="threat-search-count"></p>
+
+<p id="threat-no-results" class="threat-empty" hidden>
+
+    No matching threats found. Try another search.
+
+</p>
+
+        <div class="threat-list">
+
+            {% for threat in threats %}
+
+            <article
+
+                class="threat-card"
+
+                data-risk="{{ threat.risk_level }}"
+
+            >
+
+                <div class="threat-card-top">
+
+                    <span class="threat-risk {{ threat.risk_level|lower }}">
+
+                        {{ threat.risk_level }}
+
+                    </span>
+
+                    <span class="threat-type">
+
+                        {{ threat.threat_type }}
+
+                    </span>
+
+                </div>
+
+                <div class="threat-url">
+
+                    {{ threat.url }}
+
+                </div>
+
+                <details class="threat-view-details">
+    <summary>View Details</summary>
+    <div class="threat-details-content">
+
+                {% if threat.description %}
+
+                <p class="threat-description">
+
+                    {{ threat.description }}
+
+                </p>
+
+                {% endif %}
+
+                <div class="threat-meta">
+
+                    <span>
+
+                        Reported by:
+
+                        {{ threat.reported_by or 'Unknown User' }}
+
+                    </span>
+
+                    <span>
+
+                        {{ threat.created_at.strftime('%d %b %Y, %I:%M %p') }}
+
+                    </span>
+
+                </div>
+
+<!-- EDIT THREAT: Only visible to the report owner -->
+
+{% if current_user.is_authenticated and threat.reported_by_id == current_user.id|int %}
+
+<div class="threat-actions">
+<details class="threat-edit-details">
+
+    <summary class="threat-edit-toggle">
+
+        ✎ Edit My Report
+
+    </summary>
+
+    <form
+
+        method="POST"
+
+        action="{{ url_for('edit_threat', threat_id=threat.threat_id) }}"
+
+        class="threat-form threat-edit-form"
+
+    >
+
+        <input
+
+            type="hidden"
+
+            name="csrf_token"
+
+            value="{{ csrf_token() }}"
+
+        >
+
+        <label>Suspicious URL</label>
+
+        <input
+
+            type="url"
+
+            name="url"
+
+            value="{{ threat.url }}"
+
+            maxlength="2048"
+
+            required
+
+        >
+
+        <label>Threat Type</label>
+
+        <select name="threat_type" required>
+
+            {% for type in [
+
+                'Phishing',
+
+                'Fake Login Page',
+
+                'Scam Website',
+
+                'Malware Distribution',
+
+                'Other'
+
+            ] %}
+
+            <option
+
+                value="{{ type }}"
+
+                {% if threat.threat_type == type %}selected{% endif %}
+
+            >
+
+                {{ type }}
+
+            </option>
+
+            {% endfor %}
+
+        </select>
+
+        <label>Risk Level</label>
+
+        <select name="risk_level" required>
+
+            {% for level in ['LOW', 'MEDIUM', 'HIGH'] %}
+
+            <option
+
+                value="{{ level }}"
+
+                {% if threat.risk_level == level %}selected{% endif %}
+
+            >
+
+                {{ level }}
+
+            </option>
+
+            {% endfor %}
+
+        </select>
+
+        <label>Description</label>
+
+        <textarea
+
+            name="description"
+
+            rows="4"
+
+            maxlength="2000"
+
+        >{{ threat.description or '' }}</textarea>
+
+        <button type="submit" class="threat-submit-btn">
+
+            Save Changes
+
+        </button>
+
+    </form>
+
+</details>
+
+<!-- DELETE THREAT: Only visible to the report owner -->
+
+<form
+
+    method="POST"
+
+    action="{{ url_for('delete_threat', threat_id=threat.threat_id) }}"
+
+    class="threat-delete-form"
+
+
+
+>
+
+    <input
+
+        type="hidden"
+
+        name="csrf_token"
+
+        value="{{ csrf_token() }}"
+
+    >
+
+    <button type="button" class="threat-delete-btn threat-delete-trigger">
+    🗑 Delete My Report
+</button>
+
+</form>
+
+</div>
+
+{% endif %}
+          </div>
+            </details>
+            </article>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <div class="threat-empty">
+
+            No threats have been reported yet.
+
+            Be the first to submit one!
+
+        </div>
+
+    {% endif %}
+
+</div>
+
+            </section>
+
+            <!-- COMMUNITY FEED -->
+
+            <section class="panel dashboard-section" id="community">
+
+                <div class="panel-heading">
+
+                    <h3>
+
+                        <span class="green">◉</span>
+
+                        Latest Community Threats
+
+                    </h3>
+                </div>
+
+
+<!-- MODULE 3 — COMMUNITY POSTS FEED -->
+<details class="community-create-toggle">
+    <summary>＋ Create a Community Post</summary>
+<div class="community-publish">
+
+    <h3>✦ Share a Community Threat Post</h3>
+
+    <p class="subtle">
+        Warn others about phishing attempts, scams,
+        malware, or share useful cybersecurity advice.
+    </p>
+
+    {% if current_user.is_authenticated %}
+
+    <form
+        method="POST"
+        action="{{ url_for('add_community_post') }}"
+        class="community-post-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label for="community-post-title">Post Title</label>
+        <input
+            type="text"
+            id="community-post-title"
+            name="title"
+            placeholder="e.g. Fake bank login page circulating online"
+            maxlength="200"
+            required
+        >
+
+        <label for="community-post-category">Category</label>
+        <select
+            id="community-post-category"
+            name="category"
+            required
+        >
+            <option value="">Select a category</option>
+            <option value="Phishing Alert">Phishing Alert</option>
+            <option value="Scam Warning">Scam Warning</option>
+            <option value="Malware Alert">Malware Alert</option>
+            <option value="Security Tips">Security Tips</option>
+            <option value="General Discussion">General Discussion</option>
+        </select>
+
+        <label for="community-post-content">Your Post</label>
+        <textarea
+            id="community-post-content"
+            name="content"
+            rows="6"
+            maxlength="10000"
+            placeholder="Describe what happened, what to watch out for, or how others can stay safe..."
+            required
+        ></textarea>
+
+        <button type="submit" class="community-publish-btn">
+            + Publish Community Post
+        </button>
+    </form>
+
+    {% else %}
+
+    <p class="community-login-message">
+        <a href="{{ url_for('login') }}">Login</a>
+        or
+        <a href="{{ url_for('register') }}">Sign Up</a>
+        to publish a community post.
+    </p>
+
+    {% endif %}
+
+</div>
+</details>
+
+<div class="community-posts-feed">
+    <h3>✦ Latest Community Posts</h3>
+
+    {% if community_posts %}
+
+        {% for post in community_posts %}
+
+        <article class="community-post-card">
+
+            <div class="community-post-header">
+                <span class="community-post-author">
+                    👤 {{ post.author or 'Unknown User' }}
+                </span>
+
+                <span class="community-post-category">
+                    {{ post.category }}
+                </span>
+            </div>
+
+            <h4 class="community-post-title">
+                {{ post.title }}
+            </h4>
+
+            <p class="community-post-content">
+                {{ post.content }}
+            </p>
+
+            <div class="community-post-footer">
+                <span>
+                    🕒 {{ post.created_at.strftime('%d %b %Y, %I:%M %p') if post.created_at else '' }}
+                </span>
+            </div>
+
+
+{% if current_user.is_authenticated and post.user_id == current_user.id|int %}
+
+<div class="community-post-actions">
+
+    <details class="community-edit-details">
+
+        <summary class="community-edit-toggle">
+            ✎ Edit My Post
+        </summary>
+
+        <form
+            method="POST"
+            action="{{ url_for('edit_community_post', post_id=post.post_id) }}"
+            class="community-post-form community-edit-form"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <label for="edit-title-{{ post.post_id }}">
+                Post Title
+            </label>
+            <input
+                type="text"
+                id="edit-title-{{ post.post_id }}"
+                name="title"
+                value="{{ post.title }}"
+                maxlength="200"
+                required
+            >
+
+            <label for="edit-category-{{ post.post_id }}">
+                Category
+            </label>
+            <select
+                id="edit-category-{{ post.post_id }}"
+                name="category"
+                required
+            >
+                {% for category in [
+                    'Phishing Alert',
+                    'Scam Warning',
+                    'Malware Alert',
+                    'Security Tips',
+                    'General Discussion'
+                ] %}
+                <option
+                    value="{{ category }}"
+                    {% if post.category == category %}selected{% endif %}
+                >
+                    {{ category }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <label for="edit-content-{{ post.post_id }}">
+                Your Post
+            </label>
+            <textarea
+                id="edit-content-{{ post.post_id }}"
+                name="content"
+                rows="6"
+                maxlength="10000"
+                required
+            >{{ post.content }}</textarea>
+
+            <button type="submit" class="community-publish-btn">
+                ✓ Save Changes
+            </button>
+
+        </form>
+
+    </details>
+
+
+<form
+    method="POST"
+    action="{{ url_for('delete_community_post', post_id=post.post_id) }}"
+    class="community-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <button
+        type="button"
+        class="community-delete-btn community-delete-trigger"
+    >
+        🗑 Delete My Post
+    </button>
+</form>
+
+
+</div>
+
+{% endif %}
+
+
+<!-- MODULE 4 — COMMENT FORM -->
+<details class="community-discussion-toggle">
+    <summary>💬 View Discussion &amp; Comments</summary>
+<div class="community-comment-section">
+
+    <h4>💬 Discussion & Comments</h4>
+
+
+<!-- MODULE 4 — DISPLAY SAVED COMMENTS -->
+
+<div class="community-comments-list">
+
+    {% set post_comments = comments_by_post.get(post.post_id, []) %}
+
+    {% if post_comments %}
+
+        {% for comment in post_comments %}
+
+        <div class="community-comment-card">
+
+            <div class="community-comment-header">
+
+                <span class="community-comment-author">
+                    {{ comment.author or 'Unknown User' }}
+                </span>
+
+                <span class="community-comment-date">
+                    {{ comment.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                </span>
+
+            </div>
+
+            <p class="community-comment-text">
+                {{ comment.content }}
+            </p>
+
+<!-- EDIT COMMENT — ONLY THE AUTHOR CAN SEE THIS -->
+{% if current_user.is_authenticated and comment.user_id == current_user.id|int %}
+<div class="community-comment-actions">
+<details class="community-comment-edit">
+    <summary>✎ Edit My Comment</summary>
+
+    <form
+        action="{{ url_for('edit_community_comment', comment_id=comment.comment_id) }}"
+        method="POST"
+        class="community-comment-edit-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <textarea
+            name="content"
+            maxlength="2000"
+            rows="3"
+            required
+        >{{ comment.content }}</textarea>
+
+        <button type="submit">
+            Save Changes
+        </button>
+    </form>
+
+</details>
+
+<!-- DELETE COMMENT — ONLY THE AUTHOR CAN SEE THIS -->
+<form
+    action="{{ url_for('delete_community_comment', comment_id=comment.comment_id) }}"
+    method="POST"
+    class="community-comment-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+        <button type="submit" class="community-comment-delete-btn">
+        🗑 Delete My Comment
+    </button>
+</form>
+
+</div> <!-- End community-comment-actions -->
+
+{% endif %}
+
+
+        </div>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p class="community-no-comments">
+            No comments yet. Be the first to join the discussion!
+        </p>
+
+    {% endif %}
+
+</div>
+
+
+    {% if current_user.is_authenticated %}
+
+    <form
+        action="{{ url_for('add_community_comment', post_id=post.post_id) }}"
+        method="POST"
+        class="community-comment-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <textarea
+            name="content"
+            placeholder="Write your comment..."
+            maxlength="2000"
+            rows="3"
+            required
+        ></textarea>
+
+        <button type="submit">
+            Post Comment
+        </button>
+
+    </form>
+
+    {% else %}
+
+    <p class="subtle">
+        <a href="{{ url_for('login') }}">Login</a>
+        or
+        <a href="{{ url_for('register') }}">Sign Up</a>
+        to join the discussion.
+    </p>
+
+    {% endif %}
+
+</div>
+</details>
+
+
+        </article>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p class="community-posts-empty">
+            No community posts yet. Be the first to share a warning!
+        </p>
+
+    {% endif %}
+</div>
+
+
+
+<!-- ==========================================
+     MODULE 5 — INCIDENT REPORTS
+     ========================================== -->
+
+<section class="panel dashboard-section" id="incident-reports">
+
+    <div class="panel-heading">
+        <h3>⚠ Incident Reports</h3>
+    </div>
+
+    <p class="subtle">
+        Report phishing attacks, online scams, account compromises,
+        and other cybersecurity incidents.
+    </p>
+
+    {% if current_user.is_authenticated %}
+
+    <details class="incident-create-toggle">
+
+        <summary>＋ Submit Incident Report</summary>
+
+        <form
+            action="{{ url_for('add_incident') }}"
+            method="POST"
+            class="incident-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <label for="incident-title">Incident Title</label>
+            <input
+                type="text"
+                id="incident-title"
+                name="title"
+                placeholder="e.g. Fake banking SMS"
+                maxlength="200"
+                required
+            >
+
+            <label for="incident-type">Incident Type</label>
+            <select id="incident-type" name="incident_type" required>
+                <option value="">Select incident type</option>
+                <option value="Phishing">Phishing</option>
+                <option value="Online Scam">Online Scam</option>
+                <option value="Account Compromise">Account Compromise</option>
+                <option value="Malware">Malware</option>
+                <option value="Identity Theft">Identity Theft</option>
+                <option value="Other">Other</option>
+            </select>
+
+            <label for="incident-date">Incident Date</label>
+            <input
+                type="date"
+                id="incident-date"
+                name="incident_date"
+                required
+            >
+
+            <label for="incident-description">Description</label>
+            <textarea
+                id="incident-description"
+                name="description"
+                rows="5"
+                placeholder="Describe what happened..."
+                required
+            ></textarea>
+
+            <button type="submit">
+                Submit Incident Report
+            </button>
+
+        </form>
+
+    </details>
+
+    {% else %}
+
+    <p class="subtle">
+        <a href="{{ url_for('login') }}">Login</a>
+        or
+        <a href="{{ url_for('register') }}">Sign Up</a>
+        to submit an incident report.
+    </p>
+
+    {% endif %}
+
+
+<div class="incident-records">
+
+    <h4>Public Incident Reports</h4>
+
+    {% if incident_reports %}
+
+        {% for incident in incident_reports %}
+
+        <article class="incident-card">
+
+            <div class="incident-card-top">
+
+                <span class="incident-type">
+                    {{ incident.incident_type }}
+                </span>
+
+                <span class="incident-status">
+                    {{ incident.status }}
+                </span>
+
+            </div>
+
+            <h4 class="incident-title">
+                {{ incident.title }}
+            </h4>
+
+            <div class="incident-date">
+                Incident Date:
+                {{ incident.incident_date.strftime('%d %b %Y') }}
+            </div>
+
+            <details class="incident-view-details">
+
+                <summary>View Details</summary>
+
+                <div class="incident-details-content">
+
+                    <p class="incident-description">
+                        {{ incident.description }}
+                    </p>
+
+                    <div class="incident-meta">
+
+                        <span>
+                            Reported by:
+                            {{ incident.reported_by or 'Unknown User' }}
+                        </span>
+
+                        <span>
+                            Submitted:
+                            {{ incident.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                        </span>
+
+                    </div>
+
+
+<!-- EDIT INCIDENT — ONLY THE REPORT OWNER -->
+{% if current_user.is_authenticated and incident.user_id == current_user.id|int %}
+<div class="incident-actions">
+<details class="incident-edit-details">
+
+    <summary>✎ Edit My Incident</summary>
+
+    <form
+        action="{{ url_for('edit_incident', incident_id=incident.incident_id) }}"
+        method="POST"
+        class="incident-edit-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label>Incident Title</label>
+        <input
+            type="text"
+            name="title"
+            value="{{ incident.title }}"
+            maxlength="200"
+            required
+        >
+
+        <label>Incident Type</label>
+        <select name="incident_type" required>
+            {% for type in [
+                'Phishing',
+                'Online Scam',
+                'Account Compromise',
+                'Malware',
+                'Identity Theft',
+                'Other'
+            ] %}
+            <option
+                value="{{ type }}"
+                {% if incident.incident_type == type %}selected{% endif %}
+            >
+                {{ type }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label>Incident Date</label>
+        <input
+            type="date"
+            name="incident_date"
+            value="{{ incident.incident_date.strftime('%Y-%m-%d') }}"
+            required
+        >
+
+        <label>Description</label>
+        <textarea
+            name="description"
+            rows="5"
+            required
+        >{{ incident.description }}</textarea>
+
+        <button type="submit">
+            Save Changes
+        </button>
+
+    </form>
+
+</details>
+
+<!-- DELETE INCIDENT — ONLY THE REPORT OWNER -->
+<form
+    action="{{ url_for('delete_incident', incident_id=incident.incident_id) }}"
+    method="POST"
+    class="incident-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <button type="submit" class="incident-delete-btn">
+        🗑 Delete My Incident
+    </button>
+</form>
+
+</div> <!-- End incident-actions -->
+
+
+{% endif %}
+
+
+                </div>
+
+            </details>
+
+        </article>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p class="subtle">
+            No incident reports have been submitted yet.
+        </p>
+
+    {% endif %}
+
+</div>
+
+
+</section>
+
+<!-- ==========================================
+     MODULE 6 — THREAT VERIFICATION
+     ========================================== -->
+
+<section class="panel dashboard-section" id="threat-verification">
+
+    <div class="panel-heading">
+        <h3>🔍 Threat Verification</h3>
+    </div>
+
+    <p class="subtle">
+        Submit suspicious URLs for verification and track their review status.
+    </p>
+
+    {% if current_user.is_authenticated %}
+
+    <details class="verification-create-toggle">
+
+        <summary>＋ Submit Verification Request</summary>
+
+        <form
+            action="{{ url_for('submit_verification') }}"
+            method="POST"
+            class="verification-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <label for="verification-url">Suspicious URL</label>
+
+            <input
+                type="url"
+                id="verification-url"
+                name="suspicious_url"
+                placeholder="https://suspicious-example.com"
+                maxlength="2048"
+                required
+            >
+
+            <label for="verification-description">
+                Why is this URL suspicious?
+            </label>
+
+            <textarea
+                id="verification-description"
+                name="description"
+                rows="5"
+                placeholder="Describe the suspicious activity, message, or warning signs..."
+                required
+            ></textarea>
+
+            <button type="submit">
+                Submit for Verification
+            </button>
+
+        </form>
+
+    </details>
+
+    {% else %}
+
+    <p class="subtle">
+        <a href="{{ url_for('login') }}">Login</a>
+        or
+        <a href="{{ url_for('register') }}">Sign Up</a>
+        to submit a verification request.
+    </p>
+
+    {% endif %}
+
+
+<div class="verification-records">
+
+    <h4>Verification Requests</h4>
+
+    {% if verification_requests %}
+
+        {% for verification in verification_requests %}
+
+        <article class="verification-card">
+
+            <div class="verification-card-top">
+
+                <span class="verification-label">
+                    🔗 Suspicious URL
+                </span>
+
+                <span class="verification-status
+                    {% if verification.verification_status == 'Pending' %}
+                        status-pending
+                    {% elif verification.verification_status == 'Verified Threat' %}
+                        status-threat
+                    {% else %}
+                        status-safe
+                    {% endif %}
+                ">
+                    {{ verification.verification_status }}
+                </span>
+
+            </div>
+
+            <p class="verification-url">
+                {{ verification.suspicious_url }}
+            </p>
+
+            <div class="verification-date">
+                Submitted:
+                {{ verification.submitted_at.strftime('%d %b %Y, %I:%M %p') }}
+            </div>
+
+            <details class="verification-view-details">
+
+                <summary>View Details</summary>
+
+                <div class="verification-details-content">
+
+                    <p class="verification-description">
+                        {{ verification.description }}
+                    </p>
+
+                    <div class="verification-meta">
+
+                        <span>
+                            Submitted by:
+                            {{ verification.submitted_by or 'Unknown User' }}
+                        </span>
+
+                        <span>
+                            Last Updated:
+                            {{ verification.updated_at.strftime('%d %b %Y, %I:%M %p') }}
+                        </span>
+
+                    </div>
+
+
+<!-- MODULE 6 — ADMIN VERIFICATION REVIEW -->
+{% if current_user.is_authenticated
+      and current_user.is_admin
+      and verification.verification_status == 'Pending' %}
+
+<div class="verification-admin-review">
+
+    <h4>🛡 Admin Review</h4>
+
+    <p>
+        Review the submitted URL before making a decision.
+        Only administrators can update the verification status.
+    </p>
+
+    <div class="verification-admin-actions">
+
+        <form
+            action="{{ url_for('review_verification', verification_id=verification.verification_id) }}"
+            method="POST"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <input
+                type="hidden"
+                name="decision"
+                value="Verified Threat"
+            >
+
+            <button type="submit" class="verification-mark-threat">
+                ⚠ Mark as Verified Threat
+            </button>
+        </form>
+
+        <form
+            action="{{ url_for('review_verification', verification_id=verification.verification_id) }}"
+            method="POST"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <input
+                type="hidden"
+                name="decision"
+                value="Safe"
+            >
+
+            <button type="submit" class="verification-mark-safe">
+                ✓ Mark as Safe
+            </button>
+        </form>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+
+<!-- EDIT VERIFICATION — OWNER ONLY, PENDING ONLY -->
+{% if current_user.is_authenticated
+      and verification.user_id == current_user.id|int
+      and verification.verification_status == 'Pending' %}
+<div class="verification-actions">
+<details class="verification-edit-details">
+
+    <summary>✎ Edit My Request</summary>
+
+    <form
+        action="{{ url_for('edit_verification', verification_id=verification.verification_id) }}"
+        method="POST"
+        class="verification-edit-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label>Suspicious URL</label>
+
+        <input
+            type="url"
+            name="suspicious_url"
+            value="{{ verification.suspicious_url }}"
+            maxlength="2048"
+            required
+        >
+
+        <label>Why is this URL suspicious?</label>
+
+        <textarea
+            name="description"
+            rows="5"
+            required
+        >{{ verification.description }}</textarea>
+
+        <button type="submit">
+            Save Changes
+        </button>
+
+    </form>
+
+</details>
+
+<!-- DELETE VERIFICATION — OWNER ONLY, PENDING ONLY -->
+<form
+    action="{{ url_for('delete_verification', verification_id=verification.verification_id) }}"
+    method="POST"
+    class="verification-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <button type="submit" class="verification-delete-btn">
+        🗑 Delete My Request
+    </button>
+</form>
+
+</div> <!-- End verification-actions -->
+
+
+{% endif %}
+
+
+                </div>
+
+            </details>
+
+        </article>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p class="subtle">
+            No verification requests have been submitted yet.
+        </p>
+
+    {% endif %}
+
+</div>
+
+
+</section>
+
+
+<!-- ==========================================
+     MODULE 7 — CYBER LEARNING
+     ========================================== -->
+
+<section class="panel dashboard-section" id="cyber-learning">
+
+    <div class="panel-heading">
+        <h3>📚 Cyber Learning</h3>
+    </div>
+
+    <p class="subtle">
+        Build your cybersecurity knowledge with lessons about
+        phishing, online scams, password security, and safe browsing.
+    </p>
+
+
+<!-- MODULE 7 — ADMIN PUBLISH LESSON FORM -->
+
+{% if current_user.is_authenticated and current_user.is_admin %}
+
+<details class="learning-create-toggle">
+
+    <summary>＋ Publish Cybersecurity Lesson</summary>
+
+    <form
+        action="{{ url_for('add_cyber_lesson') }}"
+        method="POST"
+        class="learning-create-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label for="learning-title-input">Lesson Title</label>
+
+        <input
+            type="text"
+            id="learning-title-input"
+            name="title"
+            placeholder="e.g. How to Recognize Phishing Emails"
+            maxlength="200"
+            required
+        >
+
+        <label for="learning-category-input">Lesson Category</label>
+
+        <select
+            id="learning-category-input"
+            name="category"
+            required
+        >
+            <option value="">Select a category</option>
+            <option value="Phishing Awareness">Phishing Awareness</option>
+            <option value="Online Scams">Online Scams</option>
+            <option value="Password Security">Password Security</option>
+            <option value="Social Engineering">Social Engineering</option>
+            <option value="Malware Protection">Malware Protection</option>
+            <option value="Safe Browsing">Safe Browsing</option>
+        </select>
+
+        <label for="learning-content-input">Lesson Content</label>
+
+        <textarea
+            id="learning-content-input"
+            name="content"
+            rows="9"
+            placeholder="Write the cybersecurity lesson here..."
+            required
+        ></textarea>
+
+        <button type="submit">
+            Publish Lesson
+        </button>
+
+    </form>
+
+</details>
+
+{% endif %}
+
+
+    <div class="learning-records">
+
+        <h4>Cybersecurity Lessons</h4>
+
+        {% if cyber_lessons %}
+
+            {% for lesson in cyber_lessons %}
+
+            <article class="learning-card">
+
+                <div class="learning-card-top">
+
+                    <span class="learning-category">
+                        {{ lesson.category }}
+                    </span>
+
+                    <span class="learning-date">
+                        {{ lesson.created_at.strftime('%d %b %Y') }}
+                    </span>
+
+                </div>
+
+                <h4 class="learning-title">
+                    {{ lesson.title }}
+                </h4>
+
+                <details class="learning-view-details">
+
+                    <summary>📖 Read Lesson</summary>
+
+                    <div class="learning-details-content">
+
+                        <p class="learning-content">{{ lesson.content }}</p>
+
+                        <div class="learning-meta">
+                            Last Updated:
+                            {{ lesson.updated_at.strftime('%d %b %Y, %I:%M %p') }}
+                        </div>
+
+
+<!-- MODULE 7 — ADMIN EDIT LESSON -->
+{% if current_user.is_authenticated and current_user.is_admin %}
+<div class="learning-actions">
+<details class="learning-edit-details">
+
+    <summary>✎ Edit Lesson</summary>
+
+    <form
+        action="{{ url_for('edit_cyber_lesson', lesson_id=lesson.lesson_id) }}"
+        method="POST"
+        class="learning-edit-form"
+    >
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label>Lesson Title</label>
+        <input
+            type="text"
+            name="title"
+            value="{{ lesson.title }}"
+            maxlength="200"
+            required
+        >
+
+        <label>Lesson Category</label>
+        <select name="category" required>
+
+            {% for category in [
+                'Phishing Awareness',
+                'Online Scams',
+                'Password Security',
+                'Social Engineering',
+                'Malware Protection',
+                'Safe Browsing'
+            ] %}
+
+            <option
+                value="{{ category }}"
+                {% if lesson.category == category %}selected{% endif %}
+            >
+                {{ category }}
+            </option>
+
+            {% endfor %}
+
+        </select>
+
+        <label>Lesson Content</label>
+        <textarea
+            name="content"
+            rows="9"
+            required
+        >{{ lesson.content }}</textarea>
+
+        <button type="submit">
+            Save Changes
+        </button>
+
+    </form>
+
+</details>
+
+
+<!-- DELETE LESSON — ADMIN ONLY -->
+<form
+    action="{{ url_for('delete_cyber_lesson', lesson_id=lesson.lesson_id) }}"
+    method="POST"
+    class="learning-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <button type="submit" class="learning-delete-btn">
+        🗑 Delete Lesson
+    </button>
+</form>
+
+</div> <!-- End learning-actions -->
+
+
+{% endif %}
+
+
+                    </div>
+
+                </details>
+
+            </article>
+
+            {% endfor %}
+
+        {% else %}
+
+            <p class="subtle">
+                No cybersecurity lessons are available yet.
+                Check back soon!
+            </p>
+
+        {% endif %}
+
+    </div>
+
+</section>
+
+
+<!-- ==========================================
+     MODULE 8 — SECURITY QUIZ
+     ========================================== -->
+
+<section class="panel dashboard-section" id="security-quiz">
+
+    <div class="panel-header">
+        <h2>🧠 Security Quiz</h2>
+        <p>Test your cybersecurity knowledge and improve your awareness of online threats.</p>
+    </div>
+
+    <div class="quiz-container">
+
+
+<!-- MODULE 8 — ADMIN ADD QUIZ QUESTION -->
+
+{% if current_user.is_authenticated and current_user.is_admin %}
+
+<details class="quiz-create-toggle">
+
+    <summary>＋ Add Quiz Question</summary>
+
+    <form
+        action="{{ url_for('add_quiz_question') }}"
+        method="POST"
+        class="quiz-create-form"
+    >
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <label for="quiz-question-text">Question</label>
+        <textarea
+            id="quiz-question-text"
+            name="question_text"
+            rows="3"
+            placeholder="Enter your cybersecurity question..."
+            required
+        ></textarea>
+
+        <label for="quiz-option-a">Option A</label>
+        <input
+            id="quiz-option-a"
+            type="text"
+            name="option_a"
+            maxlength="500"
+            placeholder="Enter option A"
+            required
+        >
+
+        <label for="quiz-option-b">Option B</label>
+        <input
+            id="quiz-option-b"
+            type="text"
+            name="option_b"
+            maxlength="500"
+            placeholder="Enter option B"
+            required
+        >
+
+        <label for="quiz-option-c">Option C</label>
+        <input
+            id="quiz-option-c"
+            type="text"
+            name="option_c"
+            maxlength="500"
+            placeholder="Enter option C"
+            required
+        >
+
+        <label for="quiz-option-d">Option D</label>
+        <input
+            id="quiz-option-d"
+            type="text"
+            name="option_d"
+            maxlength="500"
+            placeholder="Enter option D"
+            required
+        >
+
+        <label for="quiz-correct-answer">Correct Answer</label>
+        <select
+            id="quiz-correct-answer"
+            name="correct_answer"
+            required
+        >
+            <option value="" disabled selected>
+                Select the correct answer
+            </option>
+            <option value="A">Option A</option>
+            <option value="B">Option B</option>
+            <option value="C">Option C</option>
+            <option value="D">Option D</option>
+        </select>
+
+        <label for="quiz-explanation">Answer Explanation</label>
+        <textarea
+            id="quiz-explanation"
+            name="explanation"
+            rows="4"
+            placeholder="Explain why this answer is correct..."
+            required
+        ></textarea>
+
+        <button type="submit" class="quiz-publish-btn">
+            ＋ Publish Question
+        </button>
+
+    </form>
+
+</details>
+
+{% endif %}
+
+
+        {% if quiz_questions %}
+
+        <div id="security-quiz-form">
+
+            {% for question in quiz_questions %}
+
+            <article class="quiz-question-card">
+
+                <div class="quiz-question-header">
+                    <span class="quiz-question-number">
+                        Question {{ loop.index }}
+                    </span>
+                </div>
+
+                <h3 class="quiz-question-text">
+                    {{ question.question_text }}
+                </h3>
+
+                <div class="quiz-options">
+
+                    {% for letter, answer in [
+                        ('A', question.option_a),
+                        ('B', question.option_b),
+                        ('C', question.option_c),
+                        ('D', question.option_d)
+                    ] %}
+
+                    <label class="quiz-option">
+                        <input
+                            type="radio"
+                            name="question_{{ question.question_id }}"
+                            value="{{ letter }}"
+                        >
+
+                        <span class="quiz-option-letter">
+                            {{ letter }}
+                        </span>
+
+                        <span class="quiz-option-text">
+                            {{ answer }}
+                        </span>
+                    </label>
+
+                    {% endfor %}
+
+                </div>
+
+
+<!-- MODULE 8 — ADMIN EDIT QUIZ QUESTION -->
+{% if current_user.is_authenticated and current_user.is_admin %}
+<div class="quiz-admin-actions">
+<details class="quiz-edit-toggle">
+    <summary>✎ Edit Question</summary>
+
+    <form
+        action="{{ url_for('edit_quiz_question', question_id=question.question_id) }}"
+        method="POST"
+        class="quiz-edit-form"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label>Question</label>
+        <textarea name="question_text" rows="3" required>{{ question.question_text }}</textarea>
+
+        <label>Option A</label>
+        <input type="text" name="option_a" value="{{ question.option_a }}" maxlength="500" required>
+
+        <label>Option B</label>
+        <input type="text" name="option_b" value="{{ question.option_b }}" maxlength="500" required>
+
+        <label>Option C</label>
+        <input type="text" name="option_c" value="{{ question.option_c }}" maxlength="500" required>
+
+        <label>Option D</label>
+        <input type="text" name="option_d" value="{{ question.option_d }}" maxlength="500" required>
+
+        <label>Correct Answer</label>
+        <select name="correct_answer" required>
+            {% for letter in ['A', 'B', 'C', 'D'] %}
+            <option value="{{ letter }}" {% if question.correct_answer == letter %}selected{% endif %}>
+                Option {{ letter }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label>Answer Explanation</label>
+        <textarea name="explanation" rows="4" required>{{ question.explanation }}</textarea>
+
+        <button type="submit" class="quiz-edit-save-btn">
+            Save Changes
+        </button>
+      </form>
+</details>
+
+
+<!-- MODULE 8 — ADMIN DELETE QUESTION -->
+
+<form
+    action="{{ url_for('delete_quiz_question', question_id=question.question_id) }}"
+    method="POST"
+    class="quiz-delete-form"
+>
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <button type="submit" class="quiz-delete-btn">
+        🗑 Delete Question
+    </button>
+</form>
+
+</div> <!-- End quiz-admin-actions -->
+
+
+{% endif %}
+
+
+            </article>
+
+            {% endfor %}
+
+            <div class="quiz-submit-area">
+
+<button type="button" class="quiz-submit-btn" id="quiz-submit-btn">
+    Submit Quiz
+</button>
+
+<div id="quiz-results" class="quiz-results" hidden aria-live="polite"></div>
+
+
+<!-- MODULE 8 — MY QUIZ HISTORY -->
+{% if current_user.is_authenticated %}
+<div class="quiz-history-section">
+
+
+<!-- MODULE 8 — QUIZ PROGRESS SUMMARY -->
+
+<div class="quiz-progress-summary">
+
+    <div class="quiz-progress-card">
+        <div class="quiz-progress-icon">📝</div>
+        <div class="quiz-progress-label">Total Attempts</div>
+        <div class="quiz-progress-value">
+            {{ quiz_stats.total_attempts }}
+        </div>
+    </div>
+
+    <div class="quiz-progress-card">
+        <div class="quiz-progress-icon">🏆</div>
+        <div class="quiz-progress-label">Highest Score</div>
+        <div class="quiz-progress-value">
+            {{ quiz_stats.highest_percentage }}%
+        </div>
+    </div>
+
+    <div class="quiz-progress-card">
+        <div class="quiz-progress-icon">📈</div>
+        <div class="quiz-progress-label">Average Score</div>
+        <div class="quiz-progress-value">
+            {{ quiz_stats.average_percentage }}%
+        </div>
+    </div>
+
+</div>
+
+
+<!-- MODULE 8 — QUIZ PERFORMANCE CHART -->
+
+<div class="quiz-chart-section">
+
+    <div class="quiz-chart-header">
+        <h3>📈 Quiz Performance</h3>
+        <p>Track your scores across your 10 most recent quiz attempts.</p>
+    </div>
+
+    {% if quiz_chart_data %}
+    <div class="quiz-chart-wrapper">
+        <canvas id="quiz-performance-chart"></canvas>
+    </div>
+    {% else %}
+    <p class="quiz-history-empty">
+        Complete a quiz to see your performance chart.
+    </p>
+    {% endif %}
+
+</div>
+
+<script id="quiz-chart-data" type="application/json">
+    {{ quiz_chart_data | tojson }}
+</script>
+
+    <div class="quiz-history-header">
+        <h3>📊 My Quiz History</h3>
+        <p>Track your cybersecurity knowledge and quiz performance.</p>
+    </div>
+
+    {% if quiz_history %}
+    <div class="quiz-history-table-wrapper">
+        <table class="quiz-history-table">
+            <thead>
+                <tr>
+                    <th>Attempt</th>
+                    <th>Score</th>
+                    <th>Percentage</th>
+                    <th>Date Completed</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for attempt in quiz_history %}
+                <tr>
+                    <td>#{{ attempt.score_id }}</td>
+                    <td>{{ attempt.score }}/{{ attempt.total_questions }}</td>
+                    <td>
+                        <span class="quiz-history-percentage">
+                            {{ attempt.percentage }}%
+                        </span>
+                    </td>
+                    <td>
+                        {{ attempt.completed_at.strftime('%d %b %Y, %I:%M %p') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% else %}
+    <p class="quiz-history-empty">
+        No quiz attempts recorded yet. Complete a quiz to start tracking your progress!
+    </p>
+    {% endif %}
+
+</div>
+{% endif %}
+
+
+
+            </div>
+
+        </form>
+
+        {% else %}
+
+        <div class="quiz-empty-state">
+            <p>🧠 No quiz questions are available yet.</p>
+            <p>New cybersecurity questions will appear here once an administrator publishes them.</p>
+        </div>
+
+        {% endif %}
+
+    </div>
+
+</section>
+
+
+
+<!-- MODULE 3 — PUBLISH COMMUNITY POST -->
+
+
+            </section>
+
+
+<!-- SYSTEM STATUS -->
+
+<section class="panel roadmap dashboard-section" id="roadmap">
+
+    <div class="panel-heading">
+        <h3>
+            <span class="green">⌁</span>
+            System Status
+        </h3>
+    </div>
+
+    <div class="system-status-content">
+
+        <div class="system-status-row">
+            <span>Development Progress</span>
+            <span class="system-status-complete">
+                ✓ 8/8 Modules Complete
+            </span>
+        </div>
+
+        <div class="system-status-row">
+            <span>Application Mode</span>
+            <span class="system-status-active">
+                ● Local Prototype
+            </span>
+        </div>
+
+        <div class="system-status-row">
+            <span>Threat Intelligence</span>
+            <span class="system-status-value">
+                Community Database
+            </span>
+        </div>
+
+        <div class="system-status-row">
+            <span>Database</span>
+            <span class="system-status-value">
+                MySQL
+            </span>
+        </div>
+
+        <p class="system-status-note">
+            PhishAware — Cybersecurity Awareness Platform
+        </p>
+
+    </div>
+
+</section>
+
+
+            <footer>
+
+                PHISHAWARE // ACADEMIC PROTOTYPE
+
+                • Demo warnings are fictional
+
+                • Not a security verdict
+
+            </footer>
+
+        </main>
+
+    </div>
+
+
+<dialog id="threat-delete-dialog" class="threat-delete-dialog">
+    <div class="delete-dialog-content">
+        <h3>⚠ Delete Threat Report?</h3>
+
+        <p>
+            Are you sure you want to permanently delete
+            this threat report?
+        </p>
+
+        <p class="delete-warning">
+            This action cannot be undone.
+        </p>
+
+        <div class="delete-dialog-actions">
+            <button type="button" id="cancel-threat-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-threat-delete">
+                🗑 Delete Report
+            </button>
+        </div>
+    </div>
+</dialog>
+
+
+    <!-- DASHBOARD JAVASCRIPT -->
+
+    <script
+
+        src="{{ url_for('static', filename='js/app.js') }}"
+
+    ></script>
+
+
+
+<!-- MODULE 3 — DELETE COMMUNITY POST DIALOG -->
+
+<dialog id="community-delete-dialog" class="community-delete-dialog">
+    <div class="community-delete-dialog-content">
+        <h3>⚠ Delete Community Post?</h3>
+
+        <p>Are you sure you want to delete this post?</p>
+
+        <p class="community-delete-warning">
+            This action cannot be undone.
+        </p>
+
+        <div class="community-delete-dialog-actions">
+            <button type="button" id="cancel-community-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-community-delete">
+                🗑 Delete Post
+            </button>
+        </div>
+    </div>
+</dialog>
+
+
+<!-- MODULE 4 — DELETE COMMENT CONFIRMATION -->
+<dialog id="comment-delete-dialog" class="comment-delete-dialog">
+
+    <div class="comment-delete-dialog-content">
+
+        <h3>⚠ Delete Comment?</h3>
+
+        <p>
+            Are you sure you want to delete this comment?
+            This action cannot be undone.
+        </p>
+
+        <div class="comment-delete-dialog-actions">
+
+            <button type="button" id="cancel-comment-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-comment-delete">
+                Delete Comment
+            </button>
+
+        </div>
+
+    </div>
+
+</dialog>
+
+<!-- MODULE 5 — DELETE INCIDENT CONFIRMATION -->
+
+<dialog id="incident-delete-dialog" class="incident-delete-dialog">
+
+    <div class="incident-delete-dialog-content">
+
+        <h3>⚠ Delete Incident Report?</h3>
+
+        <p>
+            Are you sure you want to delete this incident report?
+            This action cannot be undone.
+        </p>
+
+        <div class="incident-delete-dialog-actions">
+
+            <button type="button" id="cancel-incident-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-incident-delete">
+                Delete Incident
+            </button>
+
+        </div>
+
+    </div>
+
+</dialog>
+
+
+<!-- MODULE 6 — DELETE VERIFICATION CONFIRMATION -->
+
+<dialog id="verification-delete-dialog" class="verification-delete-dialog">
+
+    <div class="verification-delete-dialog-content">
+
+        <h3>⚠ Delete Verification Request?</h3>
+
+        <p>
+            Are you sure you want to delete this verification request?
+            This action cannot be undone.
+        </p>
+
+        <div class="verification-delete-dialog-actions">
+
+            <button type="button" id="cancel-verification-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-verification-delete">
+                Delete Request
+            </button>
+
+        </div>
+
+    </div>
+
+</dialog>
+
+
+<!-- MODULE 7 — DELETE LESSON CONFIRMATION -->
+
+<dialog id="learning-delete-dialog" class="learning-delete-dialog">
+
+    <div class="learning-delete-dialog-content">
+
+        <h3>⚠ Delete Cybersecurity Lesson?</h3>
+
+        <p>
+            Are you sure you want to delete this lesson?
+            This action cannot be undone.
+        </p>
+
+        <div class="learning-delete-dialog-actions">
+
+            <button type="button" id="cancel-learning-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-learning-delete">
+                Delete Lesson
+            </button>
+
+        </div>
+
+    </div>
+
+</dialog>
+
+
+<!-- MODULE 8 — DELETE QUIZ QUESTION CONFIRMATION -->
+
+<dialog id="quiz-delete-dialog" class="quiz-delete-dialog">
+
+    <div class="quiz-delete-dialog-content">
+
+        <h3>⚠ Delete Quiz Question?</h3>
+
+        <p>
+            Are you sure you want to delete this question?
+            This action cannot be undone.
+        </p>
+
+        <div class="quiz-delete-dialog-actions">
+
+            <button type="button" id="cancel-quiz-delete">
+                Cancel
+            </button>
+
+            <button type="button" id="confirm-quiz-delete">
+                Delete Question
+            </button>
+
+        </div>
+
+    </div>
+
+</dialog>
+
+
+<!-- MODULE 8 — UNANSWERED QUIZ WARNING -->
+
+<dialog id="quiz-unanswered-dialog" class="quiz-unanswered-dialog">
+    <div class="quiz-unanswered-content">
+        <h3>⚠ Incomplete Quiz</h3>
+
+        <p>
+            Please answer all questions before submitting your quiz.
+        </p>
+
+        <button type="button" id="quiz-unanswered-ok">
+            OK, Got It
+        </button>
+    </div>
+</dialog>
+
+
+
+</body>
+
+</html>

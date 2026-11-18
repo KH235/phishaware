@@ -1,0 +1,36 @@
+
+# Private configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local databases and backups
+*.db
+*.sqlite3
+*.sql
+*.dump
+
+# Editor and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+
+# Backup files
+*.bak
+
+# VS Code workspace files
+*.code-workspace
+
+
+# Local database connection test
+test_db.py
