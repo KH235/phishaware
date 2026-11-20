@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from flask_wtf.csrf import CSRFProtect
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -746,6 +746,384 @@ def logout():
     logout_user()
     return redirect(url_for("home"))
 
+
+
+# ==========================================
+# ACCOUNT — PROFILE, EMAIL, PASSWORD, DELETE
+# ==========================================
+
+EMAIL_PATTERN = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+PROFILE_STAT_TABLES = (
+    ('posts', 'community_posts'),
+    ('comments', 'community_comments'),
+    ('incidents', 'incident_reports'),
+    ('verifications', 'threat_verifications'),
+    ('scans', 'url_scans'),
+    ('quiz_attempts', 'quiz_scores'),
+)
+
+
+def delete_user_and_data(cursor, user_id):
+    """
+    Delete a user and everything they own.
+    The caller must commit (or roll back) the transaction.
+    """
+    # Comments on this user's posts are removed automatically
+    # (ON DELETE CASCADE on community_comments.post_id).
+    cursor.execute('DELETE FROM community_comments WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM community_posts WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM incident_reports WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM threat_verifications WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM quiz_scores WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM url_scans WHERE user_id = %s', (user_id,))
+
+    # Shared threat entries stay in the database, but lose their author.
+    cursor.execute(
+        'UPDATE threat_intelligence SET reported_by = NULL WHERE reported_by = %s',
+        (user_id,),
+    )
+    cursor.execute('DELETE FROM users WHERE user_id = %s', (user_id,))
+
+
+def count_admins(cursor):
+    cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = 1')
+    return cursor.fetchone()[0]
+
+
+@app.get('/profile')
+@login_required
+def profile():
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        user_id = int(current_user.id)
+
+        cursor.execute(
+            """
+            SELECT user_id, username, email, created_at, is_admin
+            FROM users
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+        account = cursor.fetchone()
+
+        if account is None:
+            logout_user()
+            return redirect(url_for('login'))
+
+        stats = {}
+        for key, table in PROFILE_STAT_TABLES:
+            cursor.execute(
+                f'SELECT COUNT(*) AS n FROM {table} WHERE user_id = %s',
+                (user_id,),
+            )
+            stats[key] = cursor.fetchone()['n']
+
+        return render_template('profile.html', account=account, stats=stats)
+
+    except Error:
+        app.logger.exception('Failed to load profile')
+        return 'Unable to load your profile.', 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+@app.post('/profile/email')
+@login_required
+@limiter.limit('5 per minute')
+def change_email():
+    new_email = request.form.get('email', '').strip().lower()
+    password = request.form.get('current_password', '')
+
+    if not new_email or not password:
+        flash('Enter a new email and your current password.', 'error')
+        return redirect(url_for('profile'))
+
+    if len(new_email) > 255 or not EMAIL_PATTERN.match(new_email):
+        flash('Enter a valid email address (255 characters or fewer).', 'error')
+        return redirect(url_for('profile'))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        user_id = int(current_user.id)
+
+        cursor.execute(
+            'SELECT password_hash FROM users WHERE user_id = %s', (user_id,)
+        )
+        row = cursor.fetchone()
+        if row is None or not check_password_hash(row['password_hash'], password):
+            flash('Current password is incorrect.', 'error')
+            return redirect(url_for('profile'))
+
+        cursor.execute(
+            'SELECT user_id FROM users WHERE email = %s AND user_id <> %s',
+            (new_email, user_id),
+        )
+        if cursor.fetchone():
+            flash('That email is already used by another account.', 'error')
+            return redirect(url_for('profile'))
+
+        cursor.execute(
+            'UPDATE users SET email = %s WHERE user_id = %s', (new_email, user_id)
+        )
+        connection.commit()
+        flash('Email updated.', 'success')
+        return redirect(url_for('profile'))
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception('Failed to change email')
+        flash('Could not update your email. Please try again.', 'error')
+        return redirect(url_for('profile'))
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+@app.post('/profile/password')
+@login_required
+@limiter.limit('5 per minute')
+def change_password():
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    if not current_password or not new_password:
+        flash('Fill in all password fields.', 'error')
+        return redirect(url_for('profile'))
+
+    if len(new_password) < 8:
+        flash('New password must contain at least 8 characters.', 'error')
+        return redirect(url_for('profile'))
+
+    if new_password != confirm_password:
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('profile'))
+
+    if new_password == current_password:
+        flash('Choose a password different from your current one.', 'error')
+        return redirect(url_for('profile'))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        user_id = int(current_user.id)
+
+        cursor.execute(
+            'SELECT password_hash FROM users WHERE user_id = %s', (user_id,)
+        )
+        row = cursor.fetchone()
+        if row is None or not check_password_hash(
+            row['password_hash'], current_password
+        ):
+            flash('Current password is incorrect.', 'error')
+            return redirect(url_for('profile'))
+
+        cursor.execute(
+            'UPDATE users SET password_hash = %s WHERE user_id = %s',
+            (generate_password_hash(new_password), user_id),
+        )
+        connection.commit()
+        flash('Password updated.', 'success')
+        return redirect(url_for('profile'))
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception('Failed to change password')
+        flash('Could not update your password. Please try again.', 'error')
+        return redirect(url_for('profile'))
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+@app.post('/profile/delete')
+@login_required
+@limiter.limit('5 per minute')
+def delete_own_account():
+    password = request.form.get('password', '')
+
+    if not password:
+        flash('Enter your password to delete your account.', 'error')
+        return redirect(url_for('profile'))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        user_id = int(current_user.id)
+
+        cursor.execute(
+            'SELECT password_hash, is_admin FROM users WHERE user_id = %s',
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if row is None or not check_password_hash(row['password_hash'], password):
+            flash('Password is incorrect. Your account was not deleted.', 'error')
+            return redirect(url_for('profile'))
+
+        # Never leave the site without an administrator.
+        if row['is_admin']:
+            plain_cursor = connection.cursor(buffered=True)
+            try:
+                if count_admins(plain_cursor) <= 1:
+                    flash(
+                        'You are the only administrator. Make another '
+                        'account an administrator before deleting this one.',
+                        'error',
+                    )
+                    return redirect(url_for('profile'))
+            finally:
+                plain_cursor.close()
+
+        delete_cursor = connection.cursor(buffered=True)
+        try:
+            delete_user_and_data(delete_cursor, user_id)
+        finally:
+            delete_cursor.close()
+        connection.commit()
+
+        logout_user()
+        return redirect(url_for('home'))
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception('Failed to delete account')
+        flash('Could not delete your account. Please try again.', 'error')
+        return redirect(url_for('profile'))
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# ADMIN — VIEW AND DELETE USERS
+# ==========================================
+
+@app.get('/admin/users')
+@login_required
+def admin_users():
+    if not current_user.is_admin:
+        return 'Administrator access required.', 403
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+
+        cursor.execute(
+            """
+            SELECT
+                u.user_id,
+                u.username,
+                u.email,
+                u.created_at,
+                u.is_admin,
+                (SELECT COUNT(*) FROM community_posts p
+                    WHERE p.user_id = u.user_id) AS post_count,
+                (SELECT COUNT(*) FROM community_comments c
+                    WHERE c.user_id = u.user_id) AS comment_count,
+                (SELECT COUNT(*) FROM url_scans s
+                    WHERE s.user_id = u.user_id) AS scan_count
+            FROM users AS u
+            ORDER BY u.created_at DESC, u.user_id DESC
+            """
+        )
+        return render_template('admin_users.html', users=cursor.fetchall())
+
+    except Error:
+        app.logger.exception('Failed to load user list')
+        return 'Unable to load users.', 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+@app.post('/admin/users/<int:user_id>/delete')
+@login_required
+def admin_delete_user(user_id):
+    if not current_user.is_admin:
+        return 'Administrator access required.', 403
+
+    if user_id == int(current_user.id):
+        flash('Use your Profile page to delete your own account.', 'error')
+        return redirect(url_for('admin_users'))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True, buffered=True)
+
+        cursor.execute(
+            'SELECT username, is_admin FROM users WHERE user_id = %s', (user_id,)
+        )
+        target = cursor.fetchone()
+
+        if target is None:
+            flash('That user no longer exists.', 'error')
+            return redirect(url_for('admin_users'))
+
+        if target['is_admin']:
+            flash(
+                'Administrator accounts cannot be deleted here. '
+                'Remove admin rights first.',
+                'error',
+            )
+            return redirect(url_for('admin_users'))
+
+        delete_cursor = connection.cursor(buffered=True)
+        try:
+            delete_user_and_data(delete_cursor, user_id)
+        finally:
+            delete_cursor.close()
+        connection.commit()
+
+        flash(f"Deleted account “{target['username']}”.", 'success')
+        return redirect(url_for('admin_users'))
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception('Failed to delete user')
+        flash('Could not delete that account. Please try again.', 'error')
+        return redirect(url_for('admin_users'))
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
 
 
 # ==========================================
