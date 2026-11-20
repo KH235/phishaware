@@ -70,6 +70,22 @@
 
                     <!-- Show Logout when logged in -->
 
+                    <a
+                        href="{{ url_for('profile') }}"
+                        class="auth-btn login-btn"
+                    >
+                        ☺ &nbsp; My Profile
+                    </a>
+
+                    {% if current_user.is_admin %}
+                    <a
+                        href="{{ url_for('admin_users') }}"
+                        class="auth-btn register-btn"
+                    >
+                        ⚙ &nbsp; Manage Users
+                    </a>
+                    {% endif %}
+
                     <form
 
                         method="POST"
