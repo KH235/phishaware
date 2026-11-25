@@ -15,7 +15,7 @@ from flask_login import (
     login_user,
     logout_user,
 )
-from mysql.connector import Error
+from psycopg2 import Error
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask_limiter import Limiter
@@ -511,6 +511,7 @@ def save_scan():
         (user_id, url, risk_score, risk_level, indicators)
     VALUES
         (%s, %s, %s, %s, %s)
+    RETURNING scan_id
     """,
     (
         int(current_user.id),
@@ -520,8 +521,9 @@ def save_scan():
         json.dumps(result["indicators"]),
     ),
 )
+        new_scan_id = cursor.fetchone()[0]
         connection.commit()
-        return jsonify(**result, message='Scan saved successfully.', scan_id=cursor.lastrowid), 201
+        return jsonify(**result, message='Scan saved successfully.', scan_id=new_scan_id), 201
     except Error:
         if connection is not None:
             connection.rollback()
