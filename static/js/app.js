@@ -282,6 +282,97 @@ if (form && result && btn) {
 
 
 // ==========================================
+// MODULE 2 — THREAT SEARCH AND FILTER
+// ==========================================
+
+const threatSearchInput = document.querySelector("#threat-search");
+const threatRiskFilter = document.querySelector("#threat-risk-filter");
+const threatStatusFilter = document.querySelector("#threat-status-filter");
+const threatCards = document.querySelectorAll(".threat-card");
+const threatSearchCount = document.querySelector("#threat-search-count");
+const threatNoResults = document.querySelector("#threat-no-results");
+
+function filterThreats() {
+    const searchText = threatSearchInput.value.trim().toLowerCase();
+    const selectedRisk = threatRiskFilter.value;
+    const selectedStatus = threatStatusFilter ? threatStatusFilter.value : "ALL";
+
+    let visibleCount = 0;
+
+    threatCards.forEach((card) => {
+        const cardText = card.textContent.toLowerCase();
+        const cardRisk = card.dataset.risk;
+
+        const matchesSearch = cardText.includes(searchText);
+        const matchesRisk =
+            selectedRisk === "ALL" || cardRisk === selectedRisk;
+
+        const matchesStatus =
+            selectedStatus === "ALL" || card.dataset.status === selectedStatus;
+
+        const shouldShow = matchesSearch && matchesRisk && matchesStatus;
+
+        card.hidden = !shouldShow;
+
+        if (shouldShow) {
+            visibleCount++;
+        }
+    });
+
+    threatSearchCount.textContent =
+        `${visibleCount} matching threat(s)`;
+
+    if (threatNoResults) {
+        threatNoResults.hidden = visibleCount !== 0;
+    }
+}
+
+if (threatSearchInput && threatRiskFilter) {
+    threatSearchInput.addEventListener("input", filterThreats);
+    threatRiskFilter.addEventListener("change", filterThreats);
+
+    if (threatStatusFilter) {
+        threatStatusFilter.addEventListener("change", filterThreats);
+    }
+
+    filterThreats();
+}
+
+
+// MODULE 2 — CUSTOM DELETE CONFIRMATION
+
+const deleteDialog = document.querySelector("#threat-delete-dialog");
+const cancelThreatDelete = document.querySelector("#cancel-threat-delete");
+const confirmThreatDelete = document.querySelector("#confirm-threat-delete");
+
+let selectedThreatDeleteForm = null;
+
+if (deleteDialog && cancelThreatDelete && confirmThreatDelete) {
+    document.querySelectorAll(".threat-delete-trigger").forEach((button) => {
+        button.addEventListener("click", () => {
+            selectedThreatDeleteForm = button.closest("form");
+            deleteDialog.showModal();
+        });
+    });
+
+    cancelThreatDelete.addEventListener("click", () => {
+        deleteDialog.close();
+    });
+
+    confirmThreatDelete.addEventListener("click", () => {
+        if (selectedThreatDeleteForm) {
+            confirmThreatDelete.disabled = true;
+            selectedThreatDeleteForm.requestSubmit();
+        }
+    });
+
+    deleteDialog.addEventListener("close", () => {
+        selectedThreatDeleteForm = null;
+        confirmThreatDelete.disabled = false;
+    });
+}
+
+// ==========================================
 // MODULE 2 — OFFICIAL SITE DIRECTORY
 // ==========================================
 
@@ -568,60 +659,6 @@ document.addEventListener("click", function (event) {
 })();
 
 
-
-
-/* MODULE 6 — CUSTOM DELETE VERIFICATION DIALOG */
-
-(function () {
-    let pendingVerificationDeleteForm = null;
-
-    document.addEventListener("click", function (event) {
-        const deleteButton = event.target.closest(".verification-delete-btn");
-
-        if (!deleteButton) return;
-
-        event.preventDefault();
-
-        pendingVerificationDeleteForm = deleteButton.closest("form");
-
-        const dialog = document.getElementById("verification-delete-dialog");
-
-        if (dialog) {
-            dialog.showModal();
-        }
-    });
-
-    document.addEventListener("click", function (event) {
-        if (event.target.id === "cancel-verification-delete") {
-            document.getElementById("verification-delete-dialog").close();
-            pendingVerificationDeleteForm = null;
-        }
-
-        if (event.target.id === "confirm-verification-delete") {
-            if (!pendingVerificationDeleteForm) return;
-
-            const form = pendingVerificationDeleteForm;
-            pendingVerificationDeleteForm = null;
-
-            document.getElementById("verification-delete-dialog").close();
-
-            sessionStorage.setItem(
-                "phishaware_scroll_position",
-                String(window.scrollY)
-            );
-
-            form.submit();
-        }
-    });
-
-    const dialog = document.getElementById("verification-delete-dialog");
-
-    if (dialog) {
-        dialog.addEventListener("close", function () {
-            pendingVerificationDeleteForm = null;
-        });
-    }
-})();
 
 
 /* MODULE 7 — DELETE LESSON CONFIRMATION */
