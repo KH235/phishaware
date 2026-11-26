@@ -168,11 +168,7 @@
     </a>
 
     <a href="#community">
-        ◉ &nbsp; Community Feed
-    </a>
-
-    <a href="#incident-reports">
-        ⚠ &nbsp; Incident Reports
+        ◉ &nbsp; Community &amp; Incidents
     </a>
 
     <a href="#threat-verification">
@@ -185,6 +181,10 @@
 
     <a href="#security-quiz">
         ☷ &nbsp; Security Quiz
+    </a>
+
+    <a href="#spot-the-phish">
+        🎣 &nbsp; Spot the Phish
     </a>
 
 </nav>
@@ -535,6 +535,16 @@
 
     </select>
 
+    <select id="threat-status-filter" aria-label="Filter threats by verification status">
+
+        <option value="ALL">All Statuses</option>
+
+        <option value="Verified">Verified</option>
+
+        <option value="Unverified">Unverified</option>
+
+    </select>
+
 </div>
 
 <p id="threat-search-count" class="threat-search-count"></p>
@@ -555,6 +565,8 @@
 
                 data-risk="{{ threat.risk_level }}"
 
+                data-status="{{ threat.status or 'Unverified' }}"
+
             >
 
                 <div class="threat-card-top">
@@ -569,6 +581,10 @@
 
                         {{ threat.threat_type }}
 
+                    </span>
+
+                    <span class="threat-status {{ 'verified' if threat.status == 'Verified' else 'unverified' }}">
+                        {{ '✔ Verified' if threat.status == 'Verified' else '○ Unverified' }}
                     </span>
 
                 </div>
@@ -610,6 +626,30 @@
                     </span>
 
                 </div>
+
+<!-- ADMIN ONLY: verify / unverify this entry -->
+
+{% if current_user.is_authenticated and current_user.is_admin %}
+<form
+    method="POST"
+    action="{{ url_for('set_threat_status', threat_id=threat.threat_id) }}"
+    class="threat-status-form"
+>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if threat.status == 'Verified' %}
+    <input type="hidden" name="status" value="Unverified">
+    <button type="submit" class="threat-status-btn unverify">
+        ○ Mark as Unverified
+    </button>
+    {% else %}
+    <input type="hidden" name="status" value="Verified">
+    <button type="submit" class="threat-status-btn verify">
+        ✔ Mark as Verified
+    </button>
+    {% endif %}
+</form>
+{% endif %}
 
 <!-- EDIT THREAT: Only visible to the report owner -->
 
@@ -795,126 +835,147 @@
 
             </section>
 
-            <!-- COMMUNITY FEED -->
+<!-- ==========================================
+     MODULE 3 — COMMUNITY & INCIDENT REPORTS
+     (Community Feed and Incident Reports merged into one feed)
+     ========================================== -->
 
-            <section class="panel dashboard-section" id="community">
+<section class="panel dashboard-section" id="community">
 
-                <div class="panel-heading">
+    <div class="panel-heading">
+        <h3>
+            <span class="green">◉</span>
+            Community &amp; Incident Reports
+        </h3>
+    </div>
 
-                    <h3>
+    <p class="subtle community-intro">
+        Warn others about phishing and scams, share security tips, or
+        tell the community about an incident you experienced.
+    </p>
 
-                        <span class="green">◉</span>
+    <details class="community-create-toggle">
+        <summary>＋ Create a Post</summary>
 
-                        Latest Community Threats
+        <div class="community-publish">
 
-                    </h3>
+            <h3>✦ Share with the Community</h3>
+
+            {% if current_user.is_authenticated %}
+
+            <form
+                method="POST"
+                action="{{ url_for('add_community_post') }}"
+                class="community-post-form"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label for="community-post-title">Post Title</label>
+                <input
+                    type="text"
+                    id="community-post-title"
+                    name="title"
+                    placeholder="e.g. Fake bank login page circulating online"
+                    maxlength="200"
+                    required
+                >
+
+                <label for="community-post-category">Category</label>
+                <select
+                    id="community-post-category"
+                    name="category"
+                    class="post-category-select"
+                    required
+                >
+                    <option value="">Select a category</option>
+                    {% for category in post_categories %}
+                    <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+
+                <!-- Only shown when "I experienced an incident" is selected -->
+                <div class="incident-date-field" data-incident-category="{{ incident_category }}" hidden>
+                    <label for="community-incident-date">
+                        Incident Date <span class="optional-tag">(optional)</span>
+                    </label>
+                    <input
+                        type="date"
+                        id="community-incident-date"
+                        name="incident_date"
+                        max="{{ now_date }}"
+                    >
                 </div>
 
+                <label for="community-post-content">Your Post</label>
+                <textarea
+                    id="community-post-content"
+                    name="content"
+                    rows="6"
+                    maxlength="10000"
+                    placeholder="Describe what happened, what to watch out for, or how others can stay safe..."
+                    required
+                ></textarea>
 
-<!-- MODULE 3 — COMMUNITY POSTS FEED -->
-<details class="community-create-toggle">
-    <summary>＋ Create a Community Post</summary>
-<div class="community-publish">
+                <label class="post-anon-label">
+                    <input type="checkbox" name="is_anonymous">
+                    <span>Post anonymously (your username will be hidden)</span>
+                </label>
 
-    <h3>✦ Share a Community Threat Post</h3>
+                <button type="submit" class="community-publish-btn">
+                    + Publish Post
+                </button>
+            </form>
 
-    <p class="subtle">
-        Warn others about phishing attempts, scams,
-        malware, or share useful cybersecurity advice.
-    </p>
+            {% else %}
 
-    {% if current_user.is_authenticated %}
+            <p class="community-login-message">
+                <a href="{{ url_for('login') }}">Login</a>
+                or
+                <a href="{{ url_for('register') }}">Sign Up</a>
+                to publish a post.
+            </p>
 
-    <form
-        method="POST"
-        action="{{ url_for('add_community_post') }}"
-        class="community-post-form"
-    >
-        <input
-            type="hidden"
-            name="csrf_token"
-            value="{{ csrf_token() }}"
-        >
+            {% endif %}
+        </div>
+    </details>
 
-        <label for="community-post-title">Post Title</label>
-        <input
-            type="text"
-            id="community-post-title"
-            name="title"
-            placeholder="e.g. Fake bank login page circulating online"
-            maxlength="200"
-            required
-        >
+    <div class="community-posts-feed">
 
-        <label for="community-post-category">Category</label>
-        <select
-            id="community-post-category"
-            name="category"
-            required
-        >
-            <option value="">Select a category</option>
-            <option value="Phishing Alert">Phishing Alert</option>
-            <option value="Scam Warning">Scam Warning</option>
-            <option value="Malware Alert">Malware Alert</option>
-            <option value="Security Tips">Security Tips</option>
-            <option value="General Discussion">General Discussion</option>
-        </select>
+        <h3>✦ Latest Posts</h3>
 
-        <label for="community-post-content">Your Post</label>
-        <textarea
-            id="community-post-content"
-            name="content"
-            rows="6"
-            maxlength="10000"
-            placeholder="Describe what happened, what to watch out for, or how others can stay safe..."
-            required
-        ></textarea>
-
-        <button type="submit" class="community-publish-btn">
-            + Publish Community Post
-        </button>
-    </form>
-
-    {% else %}
-
-    <p class="community-login-message">
-        <a href="{{ url_for('login') }}">Login</a>
-        or
-        <a href="{{ url_for('register') }}">Sign Up</a>
-        to publish a community post.
-    </p>
-
-    {% endif %}
-
-</div>
-</details>
-
-<div class="community-posts-feed">
-    <h3>✦ Latest Community Posts</h3>
-
-    {% if community_posts %}
+        {% if community_posts %}
 
         {% for post in community_posts %}
+
+        {% set is_owner = current_user.is_authenticated and post.user_id == current_user.id|int %}
 
         <article class="community-post-card">
 
             <div class="community-post-header">
+
                 <span class="community-post-author">
-                    👤 {{ post.author or 'Unknown User' }}
+                    {% if post.is_anonymous %}
+                        🕶 Anonymous{% if is_owner %} (you){% endif %}
+                    {% else %}
+                        👤 {{ post.author or 'Unknown User' }}
+                    {% endif %}
                 </span>
 
-                <span class="community-post-category">
+                <span class="community-post-category {% if post.category == incident_category %}incident-badge{% endif %}">
                     {{ post.category }}
                 </span>
+
             </div>
 
-            <h4 class="community-post-title">
-                {{ post.title }}
-            </h4>
+            <h4 class="community-post-title">{{ post.title }}</h4>
 
-            <p class="community-post-content">
-                {{ post.content }}
-            </p>
+            {% if post.category == incident_category and post.incident_date %}
+            <div class="incident-date-line">
+                📅 Incident date: {{ post.incident_date.strftime('%d %b %Y') }}
+            </div>
+            {% endif %}
+
+            <p class="community-post-content">{{ post.content }}</p>
 
             <div class="community-post-footer">
                 <span>
@@ -922,527 +983,235 @@
                 </span>
             </div>
 
+            <!-- EDIT / DELETE: only visible to the post owner -->
+            {% if is_owner %}
+            <div class="community-post-actions">
 
-{% if current_user.is_authenticated and post.user_id == current_user.id|int %}
+                <details class="community-edit-details">
+                    <summary class="community-edit-toggle">✎ Edit My Post</summary>
 
-<div class="community-post-actions">
+                    <form
+                        method="POST"
+                        action="{{ url_for('edit_community_post', post_id=post.post_id) }}"
+                        class="community-post-form community-edit-form"
+                    >
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <details class="community-edit-details">
+                        <label for="edit-title-{{ post.post_id }}">Post Title</label>
+                        <input
+                            type="text"
+                            id="edit-title-{{ post.post_id }}"
+                            name="title"
+                            value="{{ post.title }}"
+                            maxlength="200"
+                            required
+                        >
 
-        <summary class="community-edit-toggle">
-            ✎ Edit My Post
-        </summary>
+                        <label for="edit-category-{{ post.post_id }}">Category</label>
+                        <select
+                            id="edit-category-{{ post.post_id }}"
+                            name="category"
+                            class="post-category-select"
+                            required
+                        >
+                            {% for category in post_categories %}
+                            <option
+                                value="{{ category }}"
+                                {% if post.category == category %}selected{% endif %}
+                            >{{ category }}</option>
+                            {% endfor %}
+                        </select>
 
-        <form
-            method="POST"
-            action="{{ url_for('edit_community_post', post_id=post.post_id) }}"
-            class="community-post-form community-edit-form"
-        >
-            <input
-                type="hidden"
-                name="csrf_token"
-                value="{{ csrf_token() }}"
-            >
+                        <div
+                            class="incident-date-field"
+                            data-incident-category="{{ incident_category }}"
+                            {% if post.category != incident_category %}hidden{% endif %}
+                        >
+                            <label for="edit-incident-date-{{ post.post_id }}">
+                                Incident Date <span class="optional-tag">(optional)</span>
+                            </label>
+                            <input
+                                type="date"
+                                id="edit-incident-date-{{ post.post_id }}"
+                                name="incident_date"
+                                max="{{ now_date }}"
+                                value="{{ post.incident_date.strftime('%Y-%m-%d') if post.incident_date else '' }}"
+                            >
+                        </div>
 
-            <label for="edit-title-{{ post.post_id }}">
-                Post Title
-            </label>
-            <input
-                type="text"
-                id="edit-title-{{ post.post_id }}"
-                name="title"
-                value="{{ post.title }}"
-                maxlength="200"
-                required
-            >
+                        <label for="edit-content-{{ post.post_id }}">Your Post</label>
+                        <textarea
+                            id="edit-content-{{ post.post_id }}"
+                            name="content"
+                            rows="6"
+                            maxlength="10000"
+                            required
+                        >{{ post.content }}</textarea>
 
-            <label for="edit-category-{{ post.post_id }}">
-                Category
-            </label>
-            <select
-                id="edit-category-{{ post.post_id }}"
-                name="category"
-                required
-            >
-                {% for category in [
-                    'Phishing Alert',
-                    'Scam Warning',
-                    'Malware Alert',
-                    'Security Tips',
-                    'General Discussion'
-                ] %}
-                <option
-                    value="{{ category }}"
-                    {% if post.category == category %}selected{% endif %}
+                        <label class="post-anon-label">
+                            <input
+                                type="checkbox"
+                                name="is_anonymous"
+                                {% if post.is_anonymous %}checked{% endif %}
+                            >
+                            <span>Post anonymously (your username will be hidden)</span>
+                        </label>
+
+                        <button type="submit" class="community-publish-btn">
+                            ✓ Save Changes
+                        </button>
+                    </form>
+                </details>
+
+                <form
+                    method="POST"
+                    action="{{ url_for('delete_community_post', post_id=post.post_id) }}"
+                    class="community-delete-form"
                 >
-                    {{ category }}
-                </option>
-                {% endfor %}
-            </select>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-            <label for="edit-content-{{ post.post_id }}">
-                Your Post
-            </label>
-            <textarea
-                id="edit-content-{{ post.post_id }}"
-                name="content"
-                rows="6"
-                maxlength="10000"
-                required
-            >{{ post.content }}</textarea>
-
-            <button type="submit" class="community-publish-btn">
-                ✓ Save Changes
-            </button>
-
-        </form>
-
-    </details>
-
-
-<form
-    method="POST"
-    action="{{ url_for('delete_community_post', post_id=post.post_id) }}"
-    class="community-delete-form"
->
-    <input
-        type="hidden"
-        name="csrf_token"
-        value="{{ csrf_token() }}"
-    >
-
-    <button
-        type="button"
-        class="community-delete-btn community-delete-trigger"
-    >
-        🗑 Delete My Post
-    </button>
-</form>
-
-
-</div>
-
-{% endif %}
-
-
-<!-- MODULE 4 — COMMENT FORM -->
-<details class="community-discussion-toggle">
-    <summary>💬 View Discussion &amp; Comments</summary>
-<div class="community-comment-section">
-
-    <h4>💬 Discussion & Comments</h4>
-
-
-<!-- MODULE 4 — DISPLAY SAVED COMMENTS -->
-
-<div class="community-comments-list">
-
-    {% set post_comments = comments_by_post.get(post.post_id, []) %}
-
-    {% if post_comments %}
-
-        {% for comment in post_comments %}
-
-        <div class="community-comment-card">
-
-            <div class="community-comment-header">
-
-                <span class="community-comment-author">
-                    {{ comment.author or 'Unknown User' }}
-                </span>
-
-                <span class="community-comment-date">
-                    {{ comment.created_at.strftime('%d %b %Y, %I:%M %p') }}
-                </span>
+                    <button
+                        type="button"
+                        class="community-delete-btn community-delete-trigger"
+                    >
+                        🗑 Delete My Post
+                    </button>
+                </form>
 
             </div>
+            {% endif %}
 
-            <p class="community-comment-text">
-                {{ comment.content }}
-            </p>
-
-<!-- EDIT COMMENT — ONLY THE AUTHOR CAN SEE THIS -->
-{% if current_user.is_authenticated and comment.user_id == current_user.id|int %}
-<div class="community-comment-actions">
-<details class="community-comment-edit">
-    <summary>✎ Edit My Comment</summary>
-
-    <form
-        action="{{ url_for('edit_community_comment', comment_id=comment.comment_id) }}"
-        method="POST"
-        class="community-comment-edit-form"
-    >
-        <input
-            type="hidden"
-            name="csrf_token"
-            value="{{ csrf_token() }}"
-        >
+            <!-- COMMENTS (every post, including incident posts) -->
+            <details class="community-discussion-toggle">
+                <summary>
+                    💬 View Discussion &amp; Comments
+                </summary>
 
-        <textarea
-            name="content"
-            maxlength="2000"
-            rows="3"
-            required
-        >{{ comment.content }}</textarea>
+                <div class="community-comment-section">
 
-        <button type="submit">
-            Save Changes
-        </button>
-    </form>
+                    <h4>💬 Discussion &amp; Comments</h4>
 
-</details>
+                    <div class="community-comments-list">
 
-<!-- DELETE COMMENT — ONLY THE AUTHOR CAN SEE THIS -->
-<form
-    action="{{ url_for('delete_community_comment', comment_id=comment.comment_id) }}"
-    method="POST"
-    class="community-comment-delete-form"
->
-    <input
-        type="hidden"
-        name="csrf_token"
-        value="{{ csrf_token() }}"
-    >
+                        {% set post_comments = comments_by_post.get(post.post_id, []) %}
 
-        <button type="submit" class="community-comment-delete-btn">
-        🗑 Delete My Comment
-    </button>
-</form>
+                        {% if post_comments %}
 
-</div> <!-- End community-comment-actions -->
+                        {% for comment in post_comments %}
 
-{% endif %}
+                        <div class="community-comment-card">
 
+                            <div class="community-comment-header">
+                                <span class="community-comment-author">
+                                    {{ comment.author or 'Unknown User' }}
+                                </span>
+                                <span class="community-comment-date">
+                                    {{ comment.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                                </span>
+                            </div>
 
-        </div>
+                            <p class="community-comment-text">{{ comment.content }}</p>
 
-        {% endfor %}
+                            {% if current_user.is_authenticated and comment.user_id == current_user.id|int %}
+                            <div class="community-comment-actions">
 
-    {% else %}
+                                <details class="community-comment-edit">
+                                    <summary>✎ Edit My Comment</summary>
 
-        <p class="community-no-comments">
-            No comments yet. Be the first to join the discussion!
-        </p>
+                                    <form
+                                        action="{{ url_for('edit_community_comment', comment_id=comment.comment_id) }}"
+                                        method="POST"
+                                        class="community-comment-edit-form"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    {% endif %}
+                                        <textarea
+                                            name="content"
+                                            maxlength="2000"
+                                            rows="3"
+                                            required
+                                        >{{ comment.content }}</textarea>
 
-</div>
+                                        <button type="submit">Save Changes</button>
+                                    </form>
+                                </details>
 
+                                <form
+                                    action="{{ url_for('delete_community_comment', comment_id=comment.comment_id) }}"
+                                    method="POST"
+                                    class="community-comment-delete-form"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    {% if current_user.is_authenticated %}
+                                    <button type="submit" class="community-comment-delete-btn">
+                                        🗑 Delete My Comment
+                                    </button>
+                                </form>
 
-    <form
-        action="{{ url_for('add_community_comment', post_id=post.post_id) }}"
-        method="POST"
-        class="community-comment-form"
-    >
-        <input
-            type="hidden"
-            name="csrf_token"
-            value="{{ csrf_token() }}"
-        >
+                            </div>
+                            {% endif %}
 
-        <textarea
-            name="content"
-            placeholder="Write your comment..."
-            maxlength="2000"
-            rows="3"
-            required
-        ></textarea>
-
-        <button type="submit">
-            Post Comment
-        </button>
-
-    </form>
-
-    {% else %}
-
-    <p class="subtle">
-        <a href="{{ url_for('login') }}">Login</a>
-        or
-        <a href="{{ url_for('register') }}">Sign Up</a>
-        to join the discussion.
-    </p>
+                        </div>
 
-    {% endif %}
+                        {% endfor %}
 
-</div>
-</details>
+                        {% else %}
 
+                        <p class="community-no-comments">
+                            No comments yet. Be the first to join the discussion!
+                        </p>
 
-        </article>
-
-        {% endfor %}
-
-    {% else %}
-
-        <p class="community-posts-empty">
-            No community posts yet. Be the first to share a warning!
-        </p>
-
-    {% endif %}
-</div>
-
-
-
-<!-- ==========================================
-     MODULE 5 — INCIDENT REPORTS
-     ========================================== -->
-
-<section class="panel dashboard-section" id="incident-reports">
-
-    <div class="panel-heading">
-        <h3>⚠ Incident Reports</h3>
-    </div>
-
-    <p class="subtle">
-        Report phishing attacks, online scams, account compromises,
-        and other cybersecurity incidents.
-    </p>
-
-    {% if current_user.is_authenticated %}
-
-    <details class="incident-create-toggle">
-
-        <summary>＋ Submit Incident Report</summary>
-
-        <form
-            action="{{ url_for('add_incident') }}"
-            method="POST"
-            class="incident-form"
-        >
-
-            <input
-                type="hidden"
-                name="csrf_token"
-                value="{{ csrf_token() }}"
-            >
-
-            <label for="incident-title">Incident Title</label>
-            <input
-                type="text"
-                id="incident-title"
-                name="title"
-                placeholder="e.g. Fake banking SMS"
-                maxlength="200"
-                required
-            >
-
-            <label for="incident-type">Incident Type</label>
-            <select id="incident-type" name="incident_type" required>
-                <option value="">Select incident type</option>
-                <option value="Phishing">Phishing</option>
-                <option value="Online Scam">Online Scam</option>
-                <option value="Account Compromise">Account Compromise</option>
-                <option value="Malware">Malware</option>
-                <option value="Identity Theft">Identity Theft</option>
-                <option value="Other">Other</option>
-            </select>
-
-            <label for="incident-date">Incident Date</label>
-            <input
-                type="date"
-                id="incident-date"
-                name="incident_date"
-                required
-            >
-
-            <label for="incident-description">Description</label>
-            <textarea
-                id="incident-description"
-                name="description"
-                rows="5"
-                placeholder="Describe what happened..."
-                required
-            ></textarea>
-
-            <button type="submit">
-                Submit Incident Report
-            </button>
-
-        </form>
-
-    </details>
-
-    {% else %}
-
-    <p class="subtle">
-        <a href="{{ url_for('login') }}">Login</a>
-        or
-        <a href="{{ url_for('register') }}">Sign Up</a>
-        to submit an incident report.
-    </p>
-
-    {% endif %}
-
-
-<div class="incident-records">
-
-    <h4>Public Incident Reports</h4>
-
-    {% if incident_reports %}
-
-        {% for incident in incident_reports %}
-
-        <article class="incident-card">
-
-            <div class="incident-card-top">
-
-                <span class="incident-type">
-                    {{ incident.incident_type }}
-                </span>
-
-                <span class="incident-status">
-                    {{ incident.status }}
-                </span>
-
-            </div>
-
-            <h4 class="incident-title">
-                {{ incident.title }}
-            </h4>
-
-            <div class="incident-date">
-                Incident Date:
-                {{ incident.incident_date.strftime('%d %b %Y') }}
-            </div>
-
-            <details class="incident-view-details">
-
-                <summary>View Details</summary>
-
-                <div class="incident-details-content">
-
-                    <p class="incident-description">
-                        {{ incident.description }}
-                    </p>
-
-                    <div class="incident-meta">
-
-                        <span>
-                            Reported by:
-                            {{ incident.reported_by or 'Unknown User' }}
-                        </span>
-
-                        <span>
-                            Submitted:
-                            {{ incident.created_at.strftime('%d %b %Y, %I:%M %p') }}
-                        </span>
+                        {% endif %}
 
                     </div>
 
+                    {% if current_user.is_authenticated %}
 
-<!-- EDIT INCIDENT — ONLY THE REPORT OWNER -->
-{% if current_user.is_authenticated and incident.user_id == current_user.id|int %}
-<div class="incident-actions">
-<details class="incident-edit-details">
+                    <form
+                        action="{{ url_for('add_community_comment', post_id=post.post_id) }}"
+                        method="POST"
+                        class="community-comment-form"
+                    >
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <summary>✎ Edit My Incident</summary>
+                        <textarea
+                            name="content"
+                            placeholder="Write your comment..."
+                            maxlength="2000"
+                            rows="3"
+                            required
+                        ></textarea>
 
-    <form
-        action="{{ url_for('edit_incident', incident_id=incident.incident_id) }}"
-        method="POST"
-        class="incident-edit-form"
-    >
-        <input
-            type="hidden"
-            name="csrf_token"
-            value="{{ csrf_token() }}"
-        >
+                        <button type="submit">Post Comment</button>
+                    </form>
 
-        <label>Incident Title</label>
-        <input
-            type="text"
-            name="title"
-            value="{{ incident.title }}"
-            maxlength="200"
-            required
-        >
+                    {% else %}
 
-        <label>Incident Type</label>
-        <select name="incident_type" required>
-            {% for type in [
-                'Phishing',
-                'Online Scam',
-                'Account Compromise',
-                'Malware',
-                'Identity Theft',
-                'Other'
-            ] %}
-            <option
-                value="{{ type }}"
-                {% if incident.incident_type == type %}selected{% endif %}
-            >
-                {{ type }}
-            </option>
-            {% endfor %}
-        </select>
+                    <p class="subtle">
+                        <a href="{{ url_for('login') }}">Login</a>
+                        or
+                        <a href="{{ url_for('register') }}">Sign Up</a>
+                        to join the discussion.
+                    </p>
 
-        <label>Incident Date</label>
-        <input
-            type="date"
-            name="incident_date"
-            value="{{ incident.incident_date.strftime('%Y-%m-%d') }}"
-            required
-        >
-
-        <label>Description</label>
-        <textarea
-            name="description"
-            rows="5"
-            required
-        >{{ incident.description }}</textarea>
-
-        <button type="submit">
-            Save Changes
-        </button>
-
-    </form>
-
-</details>
-
-<!-- DELETE INCIDENT — ONLY THE REPORT OWNER -->
-<form
-    action="{{ url_for('delete_incident', incident_id=incident.incident_id) }}"
-    method="POST"
-    class="incident-delete-form"
->
-    <input
-        type="hidden"
-        name="csrf_token"
-        value="{{ csrf_token() }}"
-    >
-
-    <button type="submit" class="incident-delete-btn">
-        🗑 Delete My Incident
-    </button>
-</form>
-
-</div> <!-- End incident-actions -->
-
-
-{% endif %}
-
+                    {% endif %}
 
                 </div>
-
             </details>
 
         </article>
 
         {% endfor %}
 
-    {% else %}
+        {% else %}
 
-        <p class="subtle">
-            No incident reports have been submitted yet.
+        <p class="community-posts-empty">
+            No posts yet. Be the first to share a warning or an experience!
         </p>
 
-    {% endif %}
+        {% endif %}
 
-</div>
-
+    </div>
 
 </section>
 
@@ -2352,10 +2121,323 @@
 
 
 
-<!-- MODULE 3 — PUBLISH COMMUNITY POST -->
+<!-- ==========================================
+     MODULE 5 — SPOT THE PHISH
+     ========================================== -->
+
+{% macro scenario_fields(s=none) %}
+    <label>Title (shown to players)</label>
+    <input
+        type="text"
+        name="title"
+        maxlength="200"
+        placeholder="e.g. Parcel delivery fee"
+        value="{{ s.title if s else '' }}"
+        required
+    >
+
+    <label>Scenario Type</label>
+    <select name="scenario_type" required>
+        {% for t in ['Email', 'SMS', 'Login Page'] %}
+        <option value="{{ t }}" {% if s and s.scenario_type == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+    </select>
+
+    <label>From address / phone number / page URL</label>
+    <input
+        type="text"
+        name="sender"
+        maxlength="255"
+        placeholder="e.g. support@paypa1-security.com"
+        value="{{ s.sender if s else '' }}"
+        required
+    >
+
+    <label>Email subject <span class="optional-tag">(emails only)</span></label>
+    <input
+        type="text"
+        name="subject"
+        maxlength="255"
+        value="{{ s.subject if s and s.subject else '' }}"
+    >
+
+    <label>Message / page content</label>
+    <textarea name="body" rows="6" maxlength="5000" required>{{ s.body if s else '' }}</textarea>
+
+    <label>Correct answer</label>
+    <select name="verdict" required>
+        <option value="phishing" {% if s and s.is_phishing %}selected{% endif %}>Phishing</option>
+        <option value="legit" {% if s and not s.is_phishing %}selected{% endif %}>Legitimate</option>
+    </select>
+
+    <label>Red flags / explanation <span class="optional-tag">(one point per line)</span></label>
+    <textarea name="red_flags" rows="5" maxlength="3000" required>{{ s.red_flags if s else '' }}</textarea>
+{% endmacro %}
+
+<section class="panel dashboard-section" id="spot-the-phish">
+
+    <div class="panel-heading">
+        <h3>
+            <span class="green">🎣</span>
+            Spot the Phish
+        </h3>
+    </div>
+
+    <p class="subtle spot-intro">
+        Read each fake email, text message or login page and decide:
+        is it phishing or legitimate? You will see the red flags
+        explained after every answer.
+    </p>
+
+    <!-- ADMIN: ADD SCENARIO -->
+    {% if current_user.is_authenticated and current_user.is_admin %}
+    <details class="community-create-toggle spot-admin-toggle">
+        <summary>＋ Add Scenario</summary>
+
+        <div class="community-publish">
+            <form
+                method="POST"
+                action="{{ url_for('add_spot_scenario') }}"
+                class="community-post-form"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {{ scenario_fields() }}
+
+                <button type="submit" class="community-publish-btn">
+                    + Publish Scenario
+                </button>
+            </form>
+        </div>
+    </details>
+    {% endif %}
+
+    <!-- PERSONAL ACCURACY -->
+    {% if current_user.is_authenticated %}
+    <div class="spot-stats">
+        <div class="spot-stat">
+            <strong>{{ spot_stats.total }}</strong>
+            <span>Answered</span>
+        </div>
+        <div class="spot-stat">
+            <strong>{{ spot_stats.correct }}</strong>
+            <span>Correct</span>
+        </div>
+        <div class="spot-stat">
+            <strong>{{ spot_stats.accuracy }}%</strong>
+            <span>Accuracy</span>
+        </div>
+    </div>
+    {% else %}
+    <p class="subtle spot-login-note">
+        <a href="{{ url_for('login') }}">Login</a> or
+        <a href="{{ url_for('register') }}">Sign Up</a>
+        to save your answers and track your accuracy.
+    </p>
+    {% endif %}
+
+    <!-- SCENARIOS -->
+    {% if spot_scenarios %}
+
+    <div class="spot-list">
+
+        {% for sc in spot_scenarios %}
+
+        <article
+            class="spot-card"
+            data-answer-url="{{ url_for('answer_spot_scenario', scenario_id=sc.scenario_id) }}"
+        >
+
+            <div class="spot-card-top">
+                <span class="spot-type">
+                    {% if sc.scenario_type == 'Email' %}✉{% elif sc.scenario_type == 'SMS' %}💬{% else %}🌐{% endif %}
+                    {{ sc.scenario_type }}
+                </span>
+
+                <span class="spot-card-number">Scenario {{ loop.index }}</span>
+
+                {% if current_user.is_authenticated and spot_last.get(sc.scenario_id) is not none %}
+                <span class="spot-last {% if spot_last.get(sc.scenario_id) %}right{% else %}wrong{% endif %}">
+                    Last try: {{ '✓ correct' if spot_last.get(sc.scenario_id) else '✗ missed' }}
+                </span>
+                {% endif %}
+            </div>
+
+            <h4 class="spot-title">{{ sc.title }}</h4>
+
+            <!-- The "fake" message the player must judge -->
+            {% if sc.scenario_type == 'Email' %}
+
+            <div class="spot-mock spot-email">
+                <div class="spot-row"><b>From:</b> {{ sc.sender }}</div>
+                {% if sc.subject %}
+                <div class="spot-row"><b>Subject:</b> {{ sc.subject }}</div>
+                {% endif %}
+                <div class="spot-body">{{ sc.body }}</div>
+            </div>
+
+            {% elif sc.scenario_type == 'SMS' %}
+
+            <div class="spot-mock spot-sms">
+                <div class="spot-sms-from">{{ sc.sender }}</div>
+                <div class="spot-sms-bubble">{{ sc.body }}</div>
+            </div>
+
+            {% else %}
+
+            <div class="spot-mock spot-login">
+                <div class="spot-browser-bar">🔒 {{ sc.sender }}</div>
+                <div class="spot-login-page">
+                    <div class="spot-body">{{ sc.body }}</div>
+                    <input type="text" placeholder="Email or username" disabled>
+                    <input type="password" placeholder="Password" disabled>
+                    <button type="button" disabled>Sign in</button>
+                </div>
+            </div>
+
+            {% endif %}
+
+            <!-- Player controls -->
+            <div class="spot-choices">
+                <button type="button" class="spot-choice spot-choice-phish" data-answer="phishing">
+                    🎣 It's Phishing
+                </button>
+                <button type="button" class="spot-choice spot-choice-legit" data-answer="legit">
+                    ✅ It's Legitimate
+                </button>
+            </div>
+
+            <!-- Filled in by JavaScript after the player answers -->
+            <div class="spot-result" hidden>
+                <div class="spot-verdict"></div>
+                <ul class="spot-flags"></ul>
+                <p class="spot-saved subtle"></p>
+                <button type="button" class="spot-retry">↺ Try again</button>
+            </div>
+
+            <!-- ADMIN: answer key, edit and delete -->
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <div class="spot-admin">
+
+                <div class="spot-key">
+                    Answer key:
+                    <b class="{{ 'bad' if sc.is_phishing else 'good' }}">
+                        {{ 'Phishing' if sc.is_phishing else 'Legitimate' }}
+                    </b>
+                </div>
+
+                <details class="community-edit-details">
+                    <summary class="community-edit-toggle">✎ Edit Scenario</summary>
+
+                    <form
+                        method="POST"
+                        action="{{ url_for('edit_spot_scenario', scenario_id=sc.scenario_id) }}"
+                        class="community-post-form community-edit-form"
+                    >
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        {{ scenario_fields(sc) }}
+
+                        <button type="submit" class="community-publish-btn">
+                            ✓ Save Changes
+                        </button>
+                    </form>
+                </details>
+
+                <form
+                    method="POST"
+                    action="{{ url_for('delete_spot_scenario', scenario_id=sc.scenario_id) }}"
+                    class="community-delete-form"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <button type="button" class="community-delete-btn spot-delete-trigger">
+                        🗑 Delete Scenario
+                    </button>
+                </form>
+
+            </div>
+            {% endif %}
+
+        </article>
+
+        {% endfor %}
+
+    </div>
+
+    {% else %}
+
+    <p class="community-posts-empty">
+        No scenarios yet.
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        Add the first one above.
+        {% else %}
+        An administrator will add some soon.
+        {% endif %}
+    </p>
+
+    {% endif %}
+
+    <!-- MY HISTORY -->
+    {% if current_user.is_authenticated %}
+    <div class="spot-history">
+
+        <div class="spot-history-head">
+            <h4>🕒 My Answer History</h4>
+
+            {% if spot_history %}
+            <form
+                method="POST"
+                action="{{ url_for('clear_spot_history') }}"
+                class="spot-clear-form"
+            >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <button type="button" class="community-delete-btn spot-clear-trigger">
+                    🗑 Clear My History
+                </button>
+            </form>
+            {% endif %}
+        </div>
+
+        {% if spot_history %}
+        <div class="spot-history-table-wrap">
+            <table class="spot-history-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Scenario</th>
+                        <th>Your answer</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in spot_history %}
+                    <tr>
+                        <td>{{ row.answered_at.strftime('%d %b %Y, %I:%M %p') }}</td>
+                        <td>{{ row.title }} <small>({{ row.scenario_type }})</small></td>
+                        <td>{{ 'Phishing' if row.user_answer else 'Legitimate' }}</td>
+                        <td class="{{ 'good' if row.is_correct else 'bad' }}">
+                            {{ '✓ Correct' if row.is_correct else '✗ Wrong' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="subtle">Showing your 20 most recent answers.</p>
+        {% else %}
+        <p class="community-no-comments">
+            No answers yet. Try a scenario above!
+        </p>
+        {% endif %}
+
+    </div>
+    {% endif %}
+
+</section>
 
 
-            </section>
 
 
 <!-- SYSTEM STATUS -->
@@ -2512,35 +2594,37 @@
 
 </dialog>
 
-<!-- MODULE 5 — DELETE INCIDENT CONFIRMATION -->
-
-<dialog id="incident-delete-dialog" class="incident-delete-dialog">
-
-    <div class="incident-delete-dialog-content">
-
-        <h3>⚠ Delete Incident Report?</h3>
-
+<!-- MODULE 5 — SPOT THE PHISH: DELETE SCENARIO -->
+<dialog id="spot-delete-dialog" class="threat-delete-dialog">
+    <div class="delete-dialog-content">
+        <h3>⚠ Delete Scenario?</h3>
         <p>
-            Are you sure you want to delete this incident report?
-            This action cannot be undone.
+            This permanently deletes the scenario and every user's
+            saved answers for it.
         </p>
-
-        <div class="incident-delete-dialog-actions">
-
-            <button type="button" id="cancel-incident-delete">
-                Cancel
-            </button>
-
-            <button type="button" id="confirm-incident-delete">
-                Delete Incident
-            </button>
-
+        <p class="delete-warning">This action cannot be undone.</p>
+        <div class="delete-dialog-actions">
+            <button type="button" id="cancel-spot-delete">Cancel</button>
+            <button type="button" id="confirm-spot-delete">🗑 Delete Scenario</button>
         </div>
-
     </div>
-
 </dialog>
 
+<!-- MODULE 5 — SPOT THE PHISH: CLEAR HISTORY -->
+<dialog id="spot-clear-dialog" class="threat-delete-dialog">
+    <div class="delete-dialog-content">
+        <h3>⚠ Clear Your History?</h3>
+        <p>
+            This deletes all of your saved Spot the Phish answers and
+            resets your accuracy.
+        </p>
+        <p class="delete-warning">This action cannot be undone.</p>
+        <div class="delete-dialog-actions">
+            <button type="button" id="cancel-spot-clear">Cancel</button>
+            <button type="button" id="confirm-spot-clear">🗑 Clear History</button>
+        </div>
+    </div>
+</dialog>
 
 <!-- MODULE 6 — DELETE VERIFICATION CONFIRMATION -->
 
