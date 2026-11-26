@@ -4320,3 +4320,270 @@ body {
     background: #ff596d;
     color: #10121b;
 }
+
+
+/* ==========================================
+   MODULE 2 — OFFICIAL SITE DIRECTORY
+   ========================================== */
+
+#site-directory .dir-intro,
+#site-directory .dir-disclaimer {
+    margin: 4px 20px 16px;
+}
+
+#site-directory .dir-controls,
+#site-directory .threat-search-count,
+#site-directory #dir-no-results {
+    margin-left: 20px;
+    margin-right: 20px;
+}
+
+#site-directory .community-create-toggle {
+    margin: 18px 20px 24px;
+    border: 1px solid rgba(160, 110, 255, 0.35);
+    border-radius: 12px;
+    background: rgba(17, 22, 35, 0.75);
+    overflow: hidden;
+}
+
+#site-directory .community-create-toggle > summary {
+    padding: 16px 20px;
+    color: #c59bff;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+}
+
+#site-directory .community-create-toggle > summary::-webkit-details-marker {
+    display: none;
+}
+
+#site-directory .community-create-toggle .community-publish {
+    margin: 0 18px 18px;
+}
+
+.dir-card[hidden],
+#dir-no-results[hidden],
+.dir-check-result[hidden] {
+    display: none !important;
+}
+
+/* Address checker */
+
+.dir-checker {
+    margin: 0 20px 22px;
+    padding: 18px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+}
+
+.dir-checker label {
+    display: block;
+    margin-bottom: 10px;
+    color: #00ff88;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.dir-checker-row {
+    display: flex;
+    gap: 12px;
+}
+
+.dir-checker-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 14px;
+    background: #090d13;
+    border: 1px solid #344253;
+    border-radius: 7px;
+    color: #e7eaf0;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    outline: none;
+}
+
+.dir-checker-row input:focus {
+    border-color: #00ff88;
+    box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.12);
+}
+
+.dir-checker-row button {
+    padding: 0 22px;
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid #00ff88;
+    border-radius: 7px;
+    color: #00ff88;
+    font-family: Consolas, monospace;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.dir-checker-row button:hover {
+    background: #00ff88;
+    color: #090b0f;
+}
+
+.dir-check-result {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.dir-check-result.good {
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.08);
+    border: 1px solid #00ff88;
+}
+
+.dir-check-result.bad {
+    color: #ff8995;
+    background: rgba(255, 89, 109, 0.1);
+    border: 1px solid #ff596d;
+}
+
+.dir-check-result.neutral {
+    color: #ffd27a;
+    background: rgba(255, 190, 60, 0.08);
+    border: 1px solid #ffbe3c;
+}
+
+/* Entries */
+
+.dir-list,
+.dir-pending {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0 20px 24px;
+}
+
+.dir-pending h4 {
+    margin: 0 0 4px;
+    color: #c59bff;
+}
+
+.dir-card {
+    padding: 18px 20px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+}
+
+.dir-card:hover {
+    border-color: #8958d6;
+}
+
+.dir-card-pending {
+    border-style: dashed;
+    border-color: #ffbe3c;
+}
+
+.dir-card-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.dir-brand {
+    margin: 0;
+    color: #f1f5f9;
+    font-size: 17px;
+}
+
+.dir-category {
+    padding: 3px 10px;
+    border: 1px solid #8958d6;
+    border-radius: 20px;
+    color: #c59bff;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.dir-pending-tag {
+    margin-left: auto;
+    padding: 3px 10px;
+    border: 1px dashed #ffbe3c;
+    border-radius: 20px;
+    color: #ffbe3c;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.dir-domain {
+    color: #00ff88;
+    font-family: Consolas, monospace;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.dir-contact,
+.dir-meta {
+    margin-top: 6px;
+    color: #aeb8c5;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.dir-admin {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #344253;
+}
+
+.dir-approve-form {
+    margin-bottom: 10px;
+}
+
+#dir-delete-dialog .delete-dialog-actions button,
+#dir-withdraw-dialog .delete-dialog-actions button {
+    padding: 11px 16px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+#cancel-dir-delete,
+#cancel-dir-withdraw {
+    background: #252334;
+    color: #d6c9e6;
+    border: 1px solid #514367;
+}
+
+#cancel-dir-delete:hover,
+#cancel-dir-withdraw:hover {
+    background: #393047;
+}
+
+#confirm-dir-delete,
+#confirm-dir-withdraw {
+    background: rgba(255, 89, 109, 0.12);
+    color: #ff6878;
+    border: 1px solid #ff596d;
+}
+
+#confirm-dir-delete:hover,
+#confirm-dir-withdraw:hover {
+    background: #ff596d;
+    color: #10121b;
+}
+
+@media (max-width: 600px) {
+    .dir-checker-row {
+        flex-direction: column;
+    }
+
+    .dir-checker-row button {
+        padding: 12px;
+    }
+}
