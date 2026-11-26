@@ -16,7 +16,7 @@ from flask_login import (
     login_user,
     logout_user,
 )
-from psycopg2 import Error
+from psycopg2 import Error, errors
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask_limiter import Limiter
@@ -114,7 +114,8 @@ DEMO_REPORTS = [
 def home():
     connection = None
     cursor = None
-    threats = []
+    directory_entries = []
+    directory_pending = []
     community_posts = []
     comments_by_post = {}
     verification_requests = []
@@ -136,28 +137,51 @@ def home():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
-        # MODULE 2 — LOAD THREAT INTELLIGENCE
+        # MODULE 2 — LOAD OFFICIAL SITE DIRECTORY
+        # Everyone sees approved entries.
         cursor.execute(
             """
-            SELECT
-                t.threat_id,
-                t.url,
-                t.threat_type,
-                t.risk_level,
-                t.description,
-                t.created_at,
-                t.status,
-                t.reported_by AS reported_by_id,
-                u.username AS reported_by
-            FROM threat_intelligence AS t
-            LEFT JOIN users AS u
-                ON t.reported_by = u.user_id
-            ORDER BY t.created_at DESC, t.threat_id DESC
-            LIMIT 50
+            SELECT site_id, brand, domain, category, contact
+            FROM official_sites
+            WHERE status = 'Approved'
+            ORDER BY LOWER(brand) ASC, site_id ASC
+            LIMIT 500
             """
         )
 
-        threats = cursor.fetchall()
+        directory_entries = cursor.fetchall()
+
+        # Admins see every pending suggestion; users see only their own.
+        if current_user.is_authenticated:
+            if current_user.is_admin:
+                cursor.execute(
+                    """
+                    SELECT
+                        s.site_id, s.brand, s.domain, s.category,
+                        s.contact, s.created_at,
+                        u.username AS suggested_by_name
+                    FROM official_sites AS s
+                    LEFT JOIN users AS u ON u.user_id = s.suggested_by
+                    WHERE s.status = 'Pending'
+                    ORDER BY s.created_at ASC, s.site_id ASC
+                    LIMIT 200
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        site_id, brand, domain, category,
+                        contact, created_at
+                    FROM official_sites
+                    WHERE status = 'Pending' AND suggested_by = %s
+                    ORDER BY created_at DESC, site_id DESC
+                    LIMIT 50
+                    """,
+                    (int(current_user.id),),
+                )
+
+            directory_pending = cursor.fetchall()
 
         # MODULE 3 — LOAD COMMUNITY POSTS
         cursor.execute(
@@ -464,7 +488,9 @@ def home():
     return render_template(
           'index.html',
            reports=DEMO_REPORTS,
-           threats=threats,
+           directory_entries=directory_entries,
+           directory_pending=directory_pending,
+           site_categories=SITE_CATEGORIES,
            community_posts=community_posts,
            comments_by_post=comments_by_post,
            spot_scenarios=spot_scenarios,
@@ -848,9 +874,14 @@ def delete_user_and_data(cursor, user_id):
     cursor.execute('DELETE FROM quiz_scores WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM url_scans WHERE user_id = %s', (user_id,))
 
-    # Shared threat entries stay in the database, but lose their author.
+    # Pending suggestions are removed; approved entries stay in the
+    # directory but lose their suggester.
     cursor.execute(
-        'UPDATE threat_intelligence SET reported_by = NULL WHERE reported_by = %s',
+        "DELETE FROM official_sites WHERE suggested_by = %s AND status = 'Pending'",
+        (user_id,),
+    )
+    cursor.execute(
+        'UPDATE official_sites SET suggested_by = NULL WHERE suggested_by = %s',
         (user_id,),
     )
     cursor.execute('DELETE FROM users WHERE user_id = %s', (user_id,))
@@ -1197,67 +1228,109 @@ def admin_delete_user(user_id):
 
 
 # ==========================================
-# MODULE 2 — THREAT INTELLIGENCE DATABASE
-# CREATE: Add a new threat
+# MODULE 2 — OFFICIAL SITE DIRECTORY
 # ==========================================
 
-@app.post("/threats/add")
-@login_required
-def add_threat():
-    url = request.form.get("url", "").strip()
-    threat_type = request.form.get("threat_type", "").strip()
-    risk_level = request.form.get("risk_level", "").strip().upper()
-    description = request.form.get("description", "").strip()
+SITE_CATEGORIES = ("Bank", "E-Wallet", "Delivery", "Government", "Other")
 
-    if (
-        not url
-        or len(url) > 2048
-        or not threat_type
-        or len(threat_type) > 100
-        or risk_level not in ("LOW", "MEDIUM", "HIGH")
-    ):
-        return "Please enter valid threat information.", 400
+DOMAIN_PATTERN = re.compile(
+    r"^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])$"
+)
 
-    # Validate the URL format without visiting the website.
+
+def normalize_domain(raw):
+    """
+    Turn "https://www.Example.com/login" into "example.com".
+    Returns None when the value is not a valid domain name.
+    """
+    value = (raw or "").strip().lower()
+
+    if not value or len(value) > 300:
+        return None
+
+    if "://" not in value:
+        value = "http://" + value
+
     try:
-        parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            return "Please enter a valid HTTP or HTTPS URL.", 400
+        host = urlsplit(value).hostname
     except ValueError:
-        return "Please enter a valid URL.", 400
+        return None
 
+    if not host:
+        return None
+
+    host = host.rstrip(".")
+
+    if host.startswith("www."):
+        host = host[4:]
+
+    return host if DOMAIN_PATTERN.match(host) else None
+
+
+def read_site_form():
+    """Validate the directory form. Returns (data, error)."""
+    brand = request.form.get("brand", "").strip()
+    category = request.form.get("category", "").strip()
+    contact = request.form.get("contact", "").strip()
+    domain = normalize_domain(request.form.get("domain", ""))
+
+    if not brand or len(brand) > 120:
+        return None, "Brand name must contain between 1 and 120 characters."
+
+    if domain is None:
+        return None, "Please enter a valid domain name, e.g. example.com.my"
+
+    if category not in SITE_CATEGORIES:
+        return None, "Please select a valid category."
+
+    if len(contact) > 255:
+        return None, "Official contact must be 255 characters or fewer."
+
+    return {
+        "brand": brand,
+        "domain": domain,
+        "category": category,
+        "contact": contact,
+    }, None
+
+
+def run_site_write(sql, params, error_label, success_endpoint_hash="#site-directory",
+                   not_found_message=None):
+    """
+    Small helper used by the directory routes: run one write query,
+    commit, and redirect back to the directory.
+    """
     connection = None
     cursor = None
 
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO threat_intelligence
-                (url, threat_type, risk_level, description, reported_by)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (
-                url,
-                threat_type,
-                risk_level,
-                description,
-                int(current_user.id),
-            ),
-        )
-
+        cursor.execute(sql, params)
+        affected = cursor.rowcount
         connection.commit()
 
-        return redirect(url_for("home") + "#intel")
+        if affected == 0 and not_found_message:
+            return not_found_message, 404
+
+        return redirect(url_for("home") + success_endpoint_hash)
+
+    except errors.UniqueViolation:
+        if connection is not None:
+            connection.rollback()
+
+        return (
+            "That domain is already in the directory or waiting for approval.",
+            409,
+        )
 
     except Error:
         if connection is not None:
             connection.rollback()
 
-        app.logger.exception("Failed to add threat")
-        return "Unable to add threat. Please try again.", 500
+        app.logger.exception(error_label)
+        return "Something went wrong. Please try again.", 500
 
     finally:
         if cursor is not None:
@@ -1267,184 +1340,145 @@ def add_threat():
             connection.close()
 
 
-# MODULE 2 — EDIT THREAT REPORT
+# ---- CREATE: admin adds an approved entry ----
 
-@app.post("/threats/<int:threat_id>/edit")
+@app.post("/directory/add")
 @login_required
-def edit_threat(threat_id):
-    url = request.form.get("url", "").strip()
-    threat_type = request.form.get("threat_type", "").strip()
-    risk_level = request.form.get("risk_level", "").strip().upper()
-    description = request.form.get("description", "").strip()
-
-    if (
-        not url
-        or len(url) > 2048
-        or not threat_type
-        or len(threat_type) > 100
-        or risk_level not in ("LOW", "MEDIUM", "HIGH")
-    ):
-        return "Please enter valid threat information.", 400
-
-    try:
-        parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            return "Please enter a valid HTTP or HTTPS URL.", 400
-    except ValueError:
-        return "Please enter a valid URL.", 400
-
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-
-                # Check that the report exists and belongs to this user.
-        cursor.execute(
-            """
-            SELECT threat_id
-            FROM threat_intelligence
-            WHERE threat_id = %s AND reported_by = %s
-            """,
-            (threat_id, int(current_user.id)),
-        )
-
-        if cursor.fetchone() is None:
-            return "Threat report not found or permission denied.", 404
-
-        cursor.execute(
-            """
-            UPDATE threat_intelligence
-            SET url = %s,
-                threat_type = %s,
-                risk_level = %s,
-                description = %s,
-                status = 'Unverified'
-            WHERE threat_id = %s
-              AND reported_by = %s
-            """,
-            (
-                url,
-                threat_type,
-                risk_level,
-                description,
-                threat_id,
-                int(current_user.id),
-            ),
-        )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#intel")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception("Failed to edit threat")
-        return "Unable to edit threat. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# MODULE 2 — DELETE THREAT REPORT
-
-@app.post("/threats/<int:threat_id>/delete")
-@login_required
-def delete_threat(threat_id):
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            DELETE FROM threat_intelligence
-            WHERE threat_id = %s
-              AND reported_by = %s
-            """,
-            (threat_id, int(current_user.id)),
-        )
-
-        deleted_count = cursor.rowcount
-        connection.commit()
-
-        if deleted_count == 0:
-            return "Threat report not found or permission denied.", 404
-
-        return redirect(url_for("home") + "#intel")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception("Failed to delete threat")
-        return "Unable to delete threat. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# ==========================================
-# MODULE 2 — ADMIN VERIFY / UNVERIFY THREAT
-# ==========================================
-
-@app.post("/threats/<int:threat_id>/status")
-@login_required
-def set_threat_status(threat_id):
+def add_official_site():
     if not current_user.is_admin:
         return "Administrator access required.", 403
 
-    status = request.form.get("status", "").strip()
+    data, error = read_site_form()
 
-    if status not in ("Verified", "Unverified"):
-        return "Invalid status.", 400
+    if error:
+        return error, 400
 
-    connection = None
-    cursor = None
+    return run_site_write(
+        """
+        INSERT INTO official_sites
+            (brand, domain, category, contact, status, suggested_by)
+        VALUES (%s, %s, %s, %s, 'Approved', NULL)
+        """,
+        (data["brand"], data["domain"], data["category"], data["contact"]),
+        "Failed to add official site",
+    )
 
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
 
-        cursor.execute(
-            "UPDATE threat_intelligence SET status = %s WHERE threat_id = %s",
-            (status, threat_id),
-        )
+# ---- CREATE: any logged-in user suggests a missing brand (pending) ----
 
-        updated = cursor.rowcount
-        connection.commit()
+@app.post("/directory/suggest")
+@login_required
+@limiter.limit("10 per hour")
+def suggest_official_site():
+    data, error = read_site_form()
 
-        if updated == 0:
-            return "Threat report not found.", 404
+    if error:
+        return error, 400
 
-        return redirect(url_for("home") + "#intel")
+    return run_site_write(
+        """
+        INSERT INTO official_sites
+            (brand, domain, category, contact, status, suggested_by)
+        VALUES (%s, %s, %s, %s, 'Pending', %s)
+        """,
+        (
+            data["brand"],
+            data["domain"],
+            data["category"],
+            data["contact"],
+            int(current_user.id),
+        ),
+        "Failed to save site suggestion",
+    )
 
-    except Error:
-        if connection is not None:
-            connection.rollback()
 
-        app.logger.exception("Failed to update threat status")
-        return "Unable to update threat status. Please try again.", 500
+# ---- UPDATE: admin edits an entry ----
 
-    finally:
-        if cursor is not None:
-            cursor.close()
+@app.post("/directory/<int:site_id>/edit")
+@login_required
+def edit_official_site(site_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
 
-        if connection is not None and connection.is_connected():
-            connection.close()
+    data, error = read_site_form()
+
+    if error:
+        return error, 400
+
+    return run_site_write(
+        """
+        UPDATE official_sites
+        SET brand = %s,
+            domain = %s,
+            category = %s,
+            contact = %s,
+            updated_at = NOW()
+        WHERE site_id = %s
+        """,
+        (
+            data["brand"],
+            data["domain"],
+            data["category"],
+            data["contact"],
+            site_id,
+        ),
+        "Failed to edit official site",
+        not_found_message="Entry not found.",
+    )
+
+
+# ---- UPDATE: admin approves a pending suggestion ----
+
+@app.post("/directory/<int:site_id>/approve")
+@login_required
+def approve_official_site(site_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    return run_site_write(
+        """
+        UPDATE official_sites
+        SET status = 'Approved', updated_at = NOW()
+        WHERE site_id = %s AND status = 'Pending'
+        """,
+        (site_id,),
+        "Failed to approve official site",
+        not_found_message="Pending suggestion not found.",
+    )
+
+
+# ---- DELETE: admin deletes any entry (or rejects a suggestion) ----
+
+@app.post("/directory/<int:site_id>/delete")
+@login_required
+def delete_official_site(site_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    return run_site_write(
+        "DELETE FROM official_sites WHERE site_id = %s",
+        (site_id,),
+        "Failed to delete official site",
+        not_found_message="Entry not found.",
+    )
+
+
+# ---- DELETE: a user withdraws their own PENDING suggestion ----
+
+@app.post("/directory/<int:site_id>/withdraw")
+@login_required
+def withdraw_official_site(site_id):
+    return run_site_write(
+        """
+        DELETE FROM official_sites
+        WHERE site_id = %s
+          AND suggested_by = %s
+          AND status = 'Pending'
+        """,
+        (site_id, int(current_user.id)),
+        "Failed to withdraw site suggestion",
+        not_found_message="Suggestion not found, or it has already been approved.",
+    )
 
 
 # ==========================================
