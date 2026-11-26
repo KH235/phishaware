@@ -282,95 +282,165 @@ if (form && result && btn) {
 
 
 // ==========================================
-// MODULE 2 — THREAT SEARCH AND FILTER
+// MODULE 2 — OFFICIAL SITE DIRECTORY
 // ==========================================
 
-const threatSearchInput = document.querySelector("#threat-search");
-const threatRiskFilter = document.querySelector("#threat-risk-filter");
-const threatStatusFilter = document.querySelector("#threat-status-filter");
-const threatCards = document.querySelectorAll(".threat-card");
-const threatSearchCount = document.querySelector("#threat-search-count");
-const threatNoResults = document.querySelector("#threat-no-results");
+(function () {
+    const cards = Array.from(document.querySelectorAll(".dir-list .dir-card"));
+    const searchInput = document.getElementById("dir-search");
+    const categoryFilter = document.getElementById("dir-category-filter");
+    const countEl = document.getElementById("dir-count");
+    const noResults = document.getElementById("dir-no-results");
 
-function filterThreats() {
-    const searchText = threatSearchInput.value.trim().toLowerCase();
-    const selectedRisk = threatRiskFilter.value;
-    const selectedStatus = threatStatusFilter ? threatStatusFilter.value : "ALL";
+    // ---- Search and filter ----
+    function filterDirectory() {
+        if (!searchInput || !categoryFilter) return;
 
-    let visibleCount = 0;
+        const text = searchInput.value.trim().toLowerCase();
+        const category = categoryFilter.value;
+        let visible = 0;
 
-    threatCards.forEach((card) => {
-        const cardText = card.textContent.toLowerCase();
-        const cardRisk = card.dataset.risk;
+        cards.forEach((card) => {
+            const haystack = (
+                card.dataset.brand + " " + card.dataset.domain
+            ).toLowerCase();
 
-        const matchesSearch = cardText.includes(searchText);
-        const matchesRisk =
-            selectedRisk === "ALL" || cardRisk === selectedRisk;
+            const show =
+                haystack.includes(text) &&
+                (category === "ALL" || card.dataset.category === category);
 
-        const matchesStatus =
-            selectedStatus === "ALL" || card.dataset.status === selectedStatus;
-
-        const shouldShow = matchesSearch && matchesRisk && matchesStatus;
-
-        card.hidden = !shouldShow;
-
-        if (shouldShow) {
-            visibleCount++;
-        }
-    });
-
-    threatSearchCount.textContent =
-        `${visibleCount} matching threat(s)`;
-
-    if (threatNoResults) {
-        threatNoResults.hidden = visibleCount !== 0;
-    }
-}
-
-if (threatSearchInput && threatRiskFilter) {
-    threatSearchInput.addEventListener("input", filterThreats);
-    threatRiskFilter.addEventListener("change", filterThreats);
-
-    if (threatStatusFilter) {
-        threatStatusFilter.addEventListener("change", filterThreats);
-    }
-
-    filterThreats();
-}
-
-
-// MODULE 2 — CUSTOM DELETE CONFIRMATION
-
-const deleteDialog = document.querySelector("#threat-delete-dialog");
-const cancelThreatDelete = document.querySelector("#cancel-threat-delete");
-const confirmThreatDelete = document.querySelector("#confirm-threat-delete");
-
-let selectedThreatDeleteForm = null;
-
-if (deleteDialog && cancelThreatDelete && confirmThreatDelete) {
-    document.querySelectorAll(".threat-delete-trigger").forEach((button) => {
-        button.addEventListener("click", () => {
-            selectedThreatDeleteForm = button.closest("form");
-            deleteDialog.showModal();
+            card.hidden = !show;
+            if (show) visible++;
         });
-    });
 
-    cancelThreatDelete.addEventListener("click", () => {
-        deleteDialog.close();
-    });
+        if (countEl) countEl.textContent = `${visible} matching site(s)`;
+        if (noResults) noResults.hidden = visible !== 0 || cards.length === 0;
+    }
 
-    confirmThreatDelete.addEventListener("click", () => {
-        if (selectedThreatDeleteForm) {
-            confirmThreatDelete.disabled = true;
-            selectedThreatDeleteForm.requestSubmit();
+    if (searchInput && categoryFilter) {
+        searchInput.addEventListener("input", filterDirectory);
+        categoryFilter.addEventListener("change", filterDirectory);
+        filterDirectory();
+    }
+
+    // ---- Address checker ----
+    const checkInput = document.getElementById("dir-check-input");
+    const checkBtn = document.getElementById("dir-check-btn");
+    const checkResult = document.getElementById("dir-check-result");
+
+    function hostFrom(value) {
+        let v = value.trim().toLowerCase();
+        if (!v) return null;
+        if (!v.includes("://")) v = "http://" + v;
+
+        try {
+            let host = new URL(v).hostname.replace(/\.$/, "");
+            if (host.startsWith("www.")) host = host.slice(4);
+            return host.includes(".") ? host : null;
+        } catch (e) {
+            return null;
         }
-    });
+    }
 
-    deleteDialog.addEventListener("close", () => {
-        selectedThreatDeleteForm = null;
-        confirmThreatDelete.disabled = false;
-    });
-}
+    function showCheck(kind, message) {
+        checkResult.hidden = false;
+        checkResult.className = "dir-check-result " + kind;
+        checkResult.textContent = message;
+    }
+
+    function runCheck() {
+        if (!checkInput || !checkResult) return;
+
+        const host = hostFrom(checkInput.value);
+
+        if (!host) {
+            showCheck("neutral", "Enter a full website address, for example bank.example.com.");
+            return;
+        }
+
+        // 1. Exact match, or a subdomain of an official domain.
+        for (const card of cards) {
+            const domain = card.dataset.domain;
+
+            if (host === domain || host.endsWith("." + domain)) {
+                showCheck(
+                    "good",
+                    `✔ ${host} matches the official domain of ${card.dataset.brand} (${domain}). ` +
+                    "Still, only log in if you typed the address yourself or opened it from the official app."
+                );
+                return;
+            }
+        }
+
+        // 2. Contains a listed brand's name but is not its domain: classic look-alike.
+        for (const card of cards) {
+            const label = card.dataset.domain.split(".")[0];
+
+            if (label.length >= 4 && host.includes(label)) {
+                showCheck(
+                    "bad",
+                    `⚠ ${host} looks similar to ${card.dataset.brand}, but the official domain is ` +
+                    `${card.dataset.domain}. This may be a fake site — do not enter any details.`
+                );
+                return;
+            }
+        }
+
+        // 3. Unknown.
+        showCheck(
+            "neutral",
+            `${host} is not in the directory. That does not mean it is safe or unsafe — ` +
+            "the brand may simply not be listed yet. Be careful before logging in."
+        );
+    }
+
+    if (checkBtn && checkInput) {
+        checkBtn.addEventListener("click", runCheck);
+        checkInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                runCheck();
+            }
+        });
+    }
+
+    // ---- Confirmation dialogs (delete entry / withdraw suggestion) ----
+    function setupConfirm(triggerClass, dialogId, cancelId, confirmId) {
+        const dialog = document.getElementById(dialogId);
+        if (!dialog) return;
+
+        let pendingForm = null;
+
+        document.addEventListener("click", function (event) {
+            const trigger = event.target.closest("." + triggerClass);
+
+            if (trigger) {
+                pendingForm = trigger.closest("form");
+                dialog.showModal();
+                return;
+            }
+
+            if (event.target.id === cancelId) {
+                dialog.close();
+                pendingForm = null;
+            }
+
+            if (event.target.id === confirmId && pendingForm) {
+                const form = pendingForm;
+                pendingForm = null;
+                dialog.close();
+                sessionStorage.setItem(
+                    "phishaware_scroll_position",
+                    String(window.scrollY)
+                );
+                form.submit();
+            }
+        });
+    }
+
+    setupConfirm("dir-delete-trigger", "dir-delete-dialog", "cancel-dir-delete", "confirm-dir-delete");
+    setupConfirm("dir-withdraw-trigger", "dir-withdraw-dialog", "cancel-dir-withdraw", "confirm-dir-withdraw");
+})();
 
 
 /* MODULE 3 — COMMUNITY POST DELETE CONFIRMATION */
