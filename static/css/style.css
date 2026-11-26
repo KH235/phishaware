@@ -3787,3 +3787,536 @@ body {
         gap: 7px;
     }
 }
+
+
+/* ==========================================
+   MODULE 2 — THREAT STATUS (Verified / Unverified)
+   ========================================== */
+
+.threat-status {
+    margin-left: auto;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    font-family: Consolas, monospace;
+    white-space: nowrap;
+}
+
+.threat-status.verified {
+    color: #00ff88;
+    border: 1px solid #00ff88;
+    background: rgba(0, 255, 136, 0.08);
+}
+
+.threat-status.unverified {
+    color: #aeb8c5;
+    border: 1px dashed #6c7787;
+    background: rgba(174, 184, 197, 0.06);
+}
+
+.threat-status-form {
+    margin: 14px 0 0;
+}
+
+.threat-status-btn {
+    padding: 9px 14px;
+    border-radius: 7px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.threat-status-btn.verify {
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+    border: 1px solid #00ff88;
+}
+
+.threat-status-btn.verify:hover {
+    background: #00ff88;
+    color: #090b0f;
+}
+
+.threat-status-btn.unverify {
+    background: rgba(174, 184, 197, 0.08);
+    color: #c0baca;
+    border: 1px solid #6c7787;
+}
+
+.threat-status-btn.unverify:hover {
+    background: #6c7787;
+    color: #090b0f;
+}
+
+
+/* ==========================================
+   MODULE 3 — MERGED COMMUNITY & INCIDENT POSTS
+   ========================================== */
+
+.community-intro {
+    margin: 4px 20px 0;
+}
+
+.incident-date-field[hidden] {
+    display: none !important;
+}
+
+.incident-date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.optional-tag {
+    color: #8f99a8;
+    font-weight: normal;
+    font-size: 11px;
+}
+
+.community-post-form .post-anon-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #c0baca;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.community-post-form .post-anon-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    accent-color: #00ff88;
+}
+
+.community-post-category.incident-badge {
+    color: #ffbe3c;
+    border-color: #ffbe3c;
+    background: rgba(255, 190, 60, 0.08);
+}
+
+.incident-date-line {
+    margin: -4px 0 12px;
+    color: #ffbe3c;
+    font-size: 12px;
+    font-family: Consolas, monospace;
+}
+
+
+/* ==========================================
+   MODULE 5 — SPOT THE PHISH
+   ========================================== */
+
+#spot-the-phish .spot-intro,
+#spot-the-phish .spot-login-note {
+    margin: 4px 20px 14px;
+}
+
+#spot-the-phish .community-create-toggle {
+    margin: 18px 20px 24px;
+    border: 1px solid rgba(160, 110, 255, 0.35);
+    border-radius: 12px;
+    background: rgba(17, 22, 35, 0.75);
+    overflow: hidden;
+}
+
+#spot-the-phish .community-create-toggle > summary {
+    padding: 16px 20px;
+    color: #c59bff;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+}
+
+#spot-the-phish .community-create-toggle > summary::-webkit-details-marker {
+    display: none;
+}
+
+#spot-the-phish .community-create-toggle .community-publish {
+    margin: 0 18px 18px;
+}
+
+.spot-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 0 20px 22px;
+}
+
+.spot-stat {
+    flex: 1 1 120px;
+    padding: 14px 16px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.spot-stat strong {
+    display: block;
+    color: #00ff88;
+    font-size: 24px;
+    font-family: Consolas, monospace;
+}
+
+.spot-stat span {
+    color: #aeb8c5;
+    font-size: 12px;
+}
+
+.spot-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin: 0 20px 24px;
+}
+
+.spot-card {
+    padding: 22px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+    transition: border-color 0.2s;
+}
+
+.spot-card:hover {
+    border-color: #8958d6;
+}
+
+.spot-card.answered-right {
+    border-color: #00ff88;
+}
+
+.spot-card.answered-wrong {
+    border-color: #ff596d;
+}
+
+.spot-card-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.spot-type {
+    color: #c59bff;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.spot-card-number {
+    color: #8f99a8;
+    font-size: 12px;
+}
+
+.spot-last {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    border: 1px solid;
+}
+
+.spot-last.right {
+    color: #00ff88;
+    border-color: #00ff88;
+}
+
+.spot-last.wrong {
+    color: #ff6878;
+    border-color: #ff596d;
+}
+
+.spot-title {
+    margin: 0 0 14px;
+    color: #f1f5f9;
+    font-size: 17px;
+}
+
+/* The fake message */
+
+.spot-mock {
+    margin-bottom: 18px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f4f5f7;
+    color: #1b1f27;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+}
+
+.spot-body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+
+.spot-email .spot-row {
+    padding: 8px 16px;
+    background: #e6e9ef;
+    border-bottom: 1px solid #d0d5de;
+    overflow-wrap: anywhere;
+}
+
+.spot-email .spot-body {
+    padding: 16px;
+}
+
+.spot-sms {
+    padding: 14px 16px;
+    background: #eef0f4;
+}
+
+.spot-sms-from {
+    margin-bottom: 8px;
+    color: #5a6273;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.spot-sms-bubble {
+    display: inline-block;
+    max-width: 85%;
+    padding: 10px 14px;
+    background: #d9dde5;
+    border-radius: 16px 16px 16px 4px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.spot-browser-bar {
+    padding: 8px 14px;
+    background: #d5d9e1;
+    border-bottom: 1px solid #bfc5d0;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.spot-login-page {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 380px;
+    margin: 0 auto;
+    padding: 22px 16px 26px;
+}
+
+.spot-login-page input {
+    padding: 10px 12px;
+    border: 1px solid #b9c0cc;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 14px;
+}
+
+.spot-login-page button {
+    padding: 10px;
+    background: #3b6fd6;
+    color: #fff;
+    border: 0;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+/* Choices */
+
+.spot-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.spot-choice {
+    flex: 1 1 180px;
+    padding: 13px 16px;
+    border-radius: 7px;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.spot-choice-phish {
+    background: rgba(255, 89, 109, 0.1);
+    color: #ff6878;
+    border: 1px solid #ff596d;
+}
+
+.spot-choice-phish:hover:not(:disabled) {
+    background: #ff596d;
+    color: #10121b;
+}
+
+.spot-choice-legit {
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+    border: 1px solid #00ff88;
+}
+
+.spot-choice-legit:hover:not(:disabled) {
+    background: #00ff88;
+    color: #090b0f;
+}
+
+.spot-choice:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.spot-choice.picked {
+    opacity: 1;
+    box-shadow: 0 0 0 2px currentColor;
+}
+
+/* Result */
+
+.spot-result[hidden] {
+    display: none !important;
+}
+
+.spot-result {
+    margin-top: 18px;
+    padding: 16px 18px;
+    background: #0b0f16;
+    border: 1px solid #344253;
+    border-radius: 8px;
+}
+
+.spot-verdict {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.spot-verdict.good,
+.spot-history-table .good,
+.spot-key .good {
+    color: #00ff88;
+}
+
+.spot-verdict.bad,
+.spot-history-table .bad,
+.spot-key .bad {
+    color: #ff6878;
+}
+
+.spot-flags {
+    margin: 0 0 10px;
+    padding-left: 20px;
+    color: #d3d9e3;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.spot-retry {
+    padding: 8px 14px;
+    background: #252334;
+    color: #d6c9e6;
+    border: 1px solid #514367;
+    border-radius: 7px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.spot-retry:hover {
+    background: #393047;
+}
+
+/* Admin */
+
+.spot-admin {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed #344253;
+}
+
+.spot-key {
+    margin-bottom: 10px;
+    color: #aeb8c5;
+    font-size: 12px;
+}
+
+/* History */
+
+.spot-history {
+    margin: 0 20px 20px;
+    padding: 20px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+}
+
+.spot-history-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.spot-history-head h4 {
+    margin: 0;
+    color: #c59bff;
+}
+
+.spot-history-table-wrap {
+    overflow-x: auto;
+}
+
+.spot-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.spot-history-table th,
+.spot-history-table td {
+    padding: 9px 10px;
+    text-align: left;
+    border-bottom: 1px solid #263140;
+}
+
+.spot-history-table th {
+    color: #8f99a8;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+.spot-history-table small {
+    color: #8f99a8;
+}
+
+/* Dialog buttons (reuse the threat delete dialog look) */
+
+#cancel-spot-delete,
+#cancel-spot-clear {
+    background: #252334;
+    color: #d6c9e6;
+    border: 1px solid #514367;
+}
+
+#cancel-spot-delete:hover,
+#cancel-spot-clear:hover {
+    background: #393047;
+}
+
+#confirm-spot-delete,
+#confirm-spot-clear {
+    background: rgba(255, 89, 109, 0.12);
+    color: #ff6878;
+    border: 1px solid #ff596d;
+}
+
+#confirm-spot-delete:hover,
+#confirm-spot-clear:hover {
+    background: #ff596d;
+    color: #10121b;
+}
