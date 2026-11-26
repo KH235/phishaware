@@ -114,11 +114,11 @@ DEMO_REPORTS = [
 def home():
     connection = None
     cursor = None
+    threats = []
     directory_entries = []
     directory_pending = []
     community_posts = []
     comments_by_post = {}
-    verification_requests = []
     spot_scenarios = []
     spot_history = []
     spot_last = {}
@@ -136,6 +136,29 @@ def home():
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
+
+        # MODULE 2 — LOAD THREAT INTELLIGENCE
+        cursor.execute(
+            """
+            SELECT
+                t.threat_id,
+                t.url,
+                t.threat_type,
+                t.risk_level,
+                t.description,
+                t.created_at,
+                t.status,
+                t.reported_by AS reported_by_id,
+                u.username AS reported_by
+            FROM threat_intelligence AS t
+            LEFT JOIN users AS u
+                ON t.reported_by = u.user_id
+            ORDER BY t.created_at DESC, t.threat_id DESC
+            LIMIT 50
+            """
+        )
+
+        threats = cursor.fetchall()
 
         # MODULE 2 — LOAD OFFICIAL SITE DIRECTORY
         # Everyone sees approved entries.
@@ -312,32 +335,6 @@ def home():
                 }
 
         # ==========================================
-        # MODULE 6 — LOAD VERIFICATION REQUESTS
-        # ==========================================
-
-        cursor.execute(
-            """
-            SELECT
-                v.verification_id,
-                v.user_id,
-                v.suspicious_url,
-                v.description,
-                v.verification_status,
-                v.submitted_at,
-                v.updated_at,
-                u.username AS submitted_by
-            FROM threat_verifications AS v
-            LEFT JOIN users AS u
-                ON v.user_id = u.user_id
-            ORDER BY v.submitted_at DESC, v.verification_id DESC
-            LIMIT 50
-            """
-        )
-
-        verification_requests = cursor.fetchall()
-
-
-        # ==========================================
         # MODULE 7 — LOAD CYBER LEARNING LESSONS
         # ==========================================
 
@@ -488,6 +485,7 @@ def home():
     return render_template(
           'index.html',
            reports=DEMO_REPORTS,
+           threats=threats,
            directory_entries=directory_entries,
            directory_pending=directory_pending,
            site_categories=SITE_CATEGORIES,
@@ -500,7 +498,6 @@ def home():
            now_date=date.today().isoformat(),
            post_categories=POST_CATEGORIES,
            incident_category=INCIDENT_CATEGORY,
-           verification_requests=verification_requests,
            cyber_lessons=cyber_lessons,
            quiz_questions=quiz_questions,
            quiz_history=quiz_history,
@@ -854,7 +851,6 @@ PROFILE_STAT_TABLES = (
     ('posts', 'community_posts'),
     ('comments', 'community_comments'),
     ('spot_answers', 'spot_phish_answers'),
-    ('verifications', 'threat_verifications'),
     ('scans', 'url_scans'),
     ('quiz_attempts', 'quiz_scores'),
 )
@@ -870,9 +866,17 @@ def delete_user_and_data(cursor, user_id):
     cursor.execute('DELETE FROM community_comments WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM community_posts WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM spot_phish_answers WHERE user_id = %s', (user_id,))
+    # The Threat Verification module was removed; this only cleans leftover rows
+    # if the old table is still in the database.
     cursor.execute('DELETE FROM threat_verifications WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM quiz_scores WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM url_scans WHERE user_id = %s', (user_id,))
+
+    # Shared threat entries stay in the database, but lose their author.
+    cursor.execute(
+        'UPDATE threat_intelligence SET reported_by = NULL WHERE reported_by = %s',
+        (user_id,),
+    )
 
     # Pending suggestions are removed; approved entries stay in the
     # directory but lose their suggester.
@@ -1223,6 +1227,257 @@ def admin_delete_user(user_id):
     finally:
         if cursor is not None:
             cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# MODULE 2 — THREAT INTELLIGENCE DATABASE
+# CREATE: Add a new threat
+# ==========================================
+
+@app.post("/threats/add")
+@login_required
+def add_threat():
+    url = request.form.get("url", "").strip()
+    threat_type = request.form.get("threat_type", "").strip()
+    risk_level = request.form.get("risk_level", "").strip().upper()
+    description = request.form.get("description", "").strip()
+
+    if (
+        not url
+        or len(url) > 2048
+        or not threat_type
+        or len(threat_type) > 100
+        or risk_level not in ("LOW", "MEDIUM", "HIGH")
+    ):
+        return "Please enter valid threat information.", 400
+
+    # Validate the URL format without visiting the website.
+    try:
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return "Please enter a valid HTTP or HTTPS URL.", 400
+    except ValueError:
+        return "Please enter a valid URL.", 400
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO threat_intelligence
+                (url, threat_type, risk_level, description, reported_by)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                url,
+                threat_type,
+                risk_level,
+                description,
+                int(current_user.id),
+            ),
+        )
+
+        connection.commit()
+
+        return redirect(url_for("home") + "#intel")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to add threat")
+        return "Unable to add threat. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# MODULE 2 — EDIT THREAT REPORT
+
+@app.post("/threats/<int:threat_id>/edit")
+@login_required
+def edit_threat(threat_id):
+    url = request.form.get("url", "").strip()
+    threat_type = request.form.get("threat_type", "").strip()
+    risk_level = request.form.get("risk_level", "").strip().upper()
+    description = request.form.get("description", "").strip()
+
+    if (
+        not url
+        or len(url) > 2048
+        or not threat_type
+        or len(threat_type) > 100
+        or risk_level not in ("LOW", "MEDIUM", "HIGH")
+    ):
+        return "Please enter valid threat information.", 400
+
+    try:
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return "Please enter a valid HTTP or HTTPS URL.", 400
+    except ValueError:
+        return "Please enter a valid URL.", 400
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+                # Check that the report exists and belongs to this user.
+        cursor.execute(
+            """
+            SELECT threat_id
+            FROM threat_intelligence
+            WHERE threat_id = %s AND reported_by = %s
+            """,
+            (threat_id, int(current_user.id)),
+        )
+
+        if cursor.fetchone() is None:
+            return "Threat report not found or permission denied.", 404
+
+        cursor.execute(
+            """
+            UPDATE threat_intelligence
+            SET url = %s,
+                threat_type = %s,
+                risk_level = %s,
+                description = %s,
+                status = 'Unverified'
+            WHERE threat_id = %s
+              AND reported_by = %s
+            """,
+            (
+                url,
+                threat_type,
+                risk_level,
+                description,
+                threat_id,
+                int(current_user.id),
+            ),
+        )
+
+        connection.commit()
+
+        return redirect(url_for("home") + "#intel")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to edit threat")
+        return "Unable to edit threat. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# MODULE 2 — DELETE THREAT REPORT
+
+@app.post("/threats/<int:threat_id>/delete")
+@login_required
+def delete_threat(threat_id):
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            DELETE FROM threat_intelligence
+            WHERE threat_id = %s
+              AND reported_by = %s
+            """,
+            (threat_id, int(current_user.id)),
+        )
+
+        deleted_count = cursor.rowcount
+        connection.commit()
+
+        if deleted_count == 0:
+            return "Threat report not found or permission denied.", 404
+
+        return redirect(url_for("home") + "#intel")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to delete threat")
+        return "Unable to delete threat. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# MODULE 2 — ADMIN VERIFY / UNVERIFY THREAT
+# ==========================================
+
+@app.post("/threats/<int:threat_id>/status")
+@login_required
+def set_threat_status(threat_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    status = request.form.get("status", "").strip()
+
+    if status not in ("Verified", "Unverified"):
+        return "Invalid status.", 400
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "UPDATE threat_intelligence SET status = %s WHERE threat_id = %s",
+            (status, threat_id),
+        )
+
+        updated = cursor.rowcount
+        connection.commit()
+
+        if updated == 0:
+            return "Threat report not found.", 404
+
+        return redirect(url_for("home") + "#intel")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to update threat status")
+        return "Unable to update threat status. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
         if connection is not None and connection.is_connected():
             connection.close()
 
@@ -2235,305 +2490,6 @@ def clear_spot_history():
 
         app.logger.exception("Failed to clear Spot the Phish history")
         return "Unable to clear your history. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# ==========================================
-# MODULE 6 — SUBMIT THREAT VERIFICATION
-# ==========================================
-
-@app.post("/verification/submit")
-@login_required
-def submit_verification():
-    suspicious_url = request.form.get("suspicious_url", "").strip()
-    description = request.form.get("description", "").strip()
-
-    # Validate the submitted information.
-    if not suspicious_url or len(suspicious_url) > 2048:
-        return "URL must contain between 1 and 2048 characters.", 400
-
-    if not (
-        suspicious_url.lower().startswith("http://")
-        or suspicious_url.lower().startswith("https://")
-    ):
-        return "Please enter a URL starting with http:// or https://", 400
-
-    if not description:
-        return "Please explain why this URL is suspicious.", 400
-
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO threat_verifications
-                (user_id, suspicious_url, description)
-            VALUES (%s, %s, %s)
-            """,
-            (
-                int(current_user.id),
-                suspicious_url,
-                description
-            )
-        )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#threat-verification")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception(
-            "Failed to submit threat verification request"
-        )
-
-        return "Unable to submit verification request. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# ==========================================
-# MODULE 6 — EDIT VERIFICATION REQUEST
-# ==========================================
-
-@app.post("/verification/<int:verification_id>/edit")
-@login_required
-def edit_verification(verification_id):
-    suspicious_url = request.form.get("suspicious_url", "").strip()
-    description = request.form.get("description", "").strip()
-
-    # Validate the updated information.
-    if not suspicious_url or len(suspicious_url) > 2048:
-        return "URL must contain between 1 and 2048 characters.", 400
-
-    if not (
-        suspicious_url.lower().startswith("http://")
-        or suspicious_url.lower().startswith("https://")
-    ):
-        return "Please enter a URL starting with http:// or https://", 400
-
-    if not description:
-        return "Please explain why this URL is suspicious.", 400
-
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        # Check ownership and verification status.
-        cursor.execute(
-            """
-            SELECT user_id, verification_status
-            FROM threat_verifications
-            WHERE verification_id = %s
-            """,
-            (verification_id,)
-        )
-
-        verification = cursor.fetchone()
-
-        if verification is None:
-            return "Verification request not found.", 404
-
-        if int(verification["user_id"]) != int(current_user.id):
-            return "You can only edit your own verification requests.", 403
-
-        if verification["verification_status"] != "Pending":
-            return "Only pending verification requests can be edited.", 403
-
-        # Update the request only if it is still pending.
-        cursor.execute(
-            """
-            UPDATE threat_verifications
-            SET suspicious_url = %s,
-                description = %s
-            WHERE verification_id = %s
-              AND user_id = %s
-              AND verification_status = 'Pending'
-            """,
-            (
-                suspicious_url,
-                description,
-                verification_id,
-                int(current_user.id)
-            )
-        )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#threat-verification")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception("Failed to edit verification request")
-
-        return "Unable to update verification request. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# ==========================================
-# MODULE 6 — DELETE VERIFICATION REQUEST
-# ==========================================
-
-@app.post("/verification/<int:verification_id>/delete")
-@login_required
-def delete_verification(verification_id):
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        # Check that the request exists and belongs to this user.
-        cursor.execute(
-            """
-            SELECT user_id, verification_status
-            FROM threat_verifications
-            WHERE verification_id = %s
-            """,
-            (verification_id,)
-        )
-
-        verification = cursor.fetchone()
-
-        if verification is None:
-            return "Verification request not found.", 404
-
-        if int(verification["user_id"]) != int(current_user.id):
-            return "You can only delete your own verification requests.", 403
-
-        if verification["verification_status"] != "Pending":
-            return "Only pending verification requests can be deleted.", 403
-
-        # Delete only this user's pending request.
-        cursor.execute(
-            """
-            DELETE FROM threat_verifications
-            WHERE verification_id = %s
-              AND user_id = %s
-              AND verification_status = 'Pending'
-            """,
-            (verification_id, int(current_user.id))
-        )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#threat-verification")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception("Failed to delete verification request")
-        return "Unable to delete verification request. Please try again.", 500
-
-    finally:
-        if cursor is not None:
-            cursor.close()
-
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-
-# ==========================================
-# MODULE 6 — ADMIN VERIFICATION DECISION
-# ==========================================
-
-@app.post("/verification/<int:verification_id>/review")
-@login_required
-def review_verification(verification_id):
-
-    # Only administrators can review verification requests.
-    if not current_user.is_admin:
-        return "Administrator access required.", 403
-
-    decision = request.form.get("decision", "").strip()
-
-    valid_decisions = {"Verified Threat", "Safe"}
-
-    if decision not in valid_decisions:
-        return "Invalid verification decision.", 400
-
-    connection = None
-    cursor = None
-
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        # Lock the request while checking its current status.
-        cursor.execute(
-            """
-            SELECT verification_status
-            FROM threat_verifications
-            WHERE verification_id = %s
-            FOR UPDATE
-            """,
-            (verification_id,)
-        )
-
-        verification = cursor.fetchone()
-
-        if verification is None:
-            connection.rollback()
-            return "Verification request not found.", 404
-
-        if verification["verification_status"] != "Pending":
-            connection.rollback()
-            return "This request has already been reviewed.", 409
-
-        # Record the administrator's decision.
-        cursor.execute(
-            """
-            UPDATE threat_verifications
-            SET verification_status = %s
-            WHERE verification_id = %s
-              AND verification_status = 'Pending'
-            """,
-            (decision, verification_id)
-        )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#threat-verification")
-
-    except Error:
-        if connection is not None:
-            connection.rollback()
-
-        app.logger.exception(
-            "Failed to review threat verification request"
-        )
-
-        return "Unable to review verification request. Please try again.", 500
 
     finally:
         if cursor is not None:
