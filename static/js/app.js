@@ -287,6 +287,7 @@ if (form && result && btn) {
 
 const threatSearchInput = document.querySelector("#threat-search");
 const threatRiskFilter = document.querySelector("#threat-risk-filter");
+const threatStatusFilter = document.querySelector("#threat-status-filter");
 const threatCards = document.querySelectorAll(".threat-card");
 const threatSearchCount = document.querySelector("#threat-search-count");
 const threatNoResults = document.querySelector("#threat-no-results");
@@ -294,6 +295,7 @@ const threatNoResults = document.querySelector("#threat-no-results");
 function filterThreats() {
     const searchText = threatSearchInput.value.trim().toLowerCase();
     const selectedRisk = threatRiskFilter.value;
+    const selectedStatus = threatStatusFilter ? threatStatusFilter.value : "ALL";
 
     let visibleCount = 0;
 
@@ -305,7 +307,10 @@ function filterThreats() {
         const matchesRisk =
             selectedRisk === "ALL" || cardRisk === selectedRisk;
 
-        const shouldShow = matchesSearch && matchesRisk;
+        const matchesStatus =
+            selectedStatus === "ALL" || card.dataset.status === selectedStatus;
+
+        const shouldShow = matchesSearch && matchesRisk && matchesStatus;
 
         card.hidden = !shouldShow;
 
@@ -325,6 +330,10 @@ function filterThreats() {
 if (threatSearchInput && threatRiskFilter) {
     threatSearchInput.addEventListener("input", filterThreats);
     threatRiskFilter.addEventListener("change", filterThreats);
+
+    if (threatStatusFilter) {
+        threatStatusFilter.addEventListener("change", filterThreats);
+    }
 
     filterThreats();
 }
@@ -489,50 +498,6 @@ document.addEventListener("click", function (event) {
 })();
 
 
-/* MODULE 5 — CUSTOM DELETE INCIDENT DIALOG */
-
-(function () {
-    let pendingIncidentDeleteForm = null;
-
-    document.addEventListener("click", function (event) {
-        const deleteButton = event.target.closest(".incident-delete-btn");
-
-        if (!deleteButton) return;
-
-        event.preventDefault();
-
-        pendingIncidentDeleteForm = deleteButton.closest("form");
-
-        const dialog = document.getElementById("incident-delete-dialog");
-
-        if (dialog) {
-            dialog.showModal();
-        }
-    });
-
-    document.addEventListener("click", function (event) {
-        if (event.target.id === "cancel-incident-delete") {
-            document.getElementById("incident-delete-dialog").close();
-            pendingIncidentDeleteForm = null;
-        }
-
-        if (event.target.id === "confirm-incident-delete") {
-            if (!pendingIncidentDeleteForm) return;
-
-            const form = pendingIncidentDeleteForm;
-            pendingIncidentDeleteForm = null;
-
-            document.getElementById("incident-delete-dialog").close();
-
-            sessionStorage.setItem(
-                "phishaware_scroll_position",
-                String(window.scrollY)
-            );
-
-            form.submit();
-        }
-    });
-})();
 
 
 /* MODULE 6 — CUSTOM DELETE VERIFICATION DIALOG */
@@ -1081,3 +1046,197 @@ document.addEventListener("DOMContentLoaded", function () {
 
     window.addEventListener("resize", drawQuizChart);
 });
+
+
+// ==========================================
+// MODULE 3 — INCIDENT DATE FIELD (merged community + incident posts)
+// Shows the optional incident date only when the category is
+// "I experienced an incident".
+// ==========================================
+
+(function () {
+    function syncIncidentField(select) {
+        const form = select.closest("form");
+        if (!form) return;
+
+        const field = form.querySelector(".incident-date-field");
+        if (!field) return;
+
+        const isIncident = select.value === field.dataset.incidentCategory;
+        field.hidden = !isIncident;
+
+        // Never send a stale date for non-incident posts.
+        if (!isIncident) {
+            const dateInput = field.querySelector('input[type="date"]');
+            if (dateInput) dateInput.value = "";
+        }
+    }
+
+    document.addEventListener("change", function (event) {
+        if (event.target.classList.contains("post-category-select")) {
+            syncIncidentField(event.target);
+        }
+    });
+
+    document
+        .querySelectorAll(".post-category-select")
+        .forEach(syncIncidentField);
+})();
+
+
+// ==========================================
+// MODULE 5 — SPOT THE PHISH
+// ==========================================
+
+(function () {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    function sessionScroll() {
+        sessionStorage.setItem("phishaware_scroll_position", String(window.scrollY));
+    }
+
+    // ---- Answering a scenario ----
+    document.addEventListener("click", async function (event) {
+        const choice = event.target.closest(".spot-choice");
+
+        if (choice) {
+            const card = choice.closest(".spot-card");
+            if (!card) return;
+
+            const buttons = card.querySelectorAll(".spot-choice");
+            buttons.forEach((b) => (b.disabled = true));
+
+            try {
+                const response = await fetch(card.dataset.answerUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrf,
+                    },
+                    body: JSON.stringify({ answer: choice.dataset.answer }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Could not check your answer.");
+                }
+
+                showSpotResult(card, choice.dataset.answer, data);
+            } catch (error) {
+                buttons.forEach((b) => (b.disabled = false));
+                alert(error.message || "Something went wrong.");
+            }
+            return;
+        }
+
+        const retry = event.target.closest(".spot-retry");
+
+        if (retry) {
+            const card = retry.closest(".spot-card");
+            card.querySelector(".spot-result").hidden = true;
+            card.classList.remove("answered-right", "answered-wrong");
+            card.querySelectorAll(".spot-choice").forEach((b) => {
+                b.disabled = false;
+                b.classList.remove("picked");
+            });
+        }
+    });
+
+    function showSpotResult(card, picked, data) {
+        const result = card.querySelector(".spot-result");
+        const verdict = result.querySelector(".spot-verdict");
+        const flags = result.querySelector(".spot-flags");
+        const saved = result.querySelector(".spot-saved");
+
+        card.classList.toggle("answered-right", data.correct);
+        card.classList.toggle("answered-wrong", !data.correct);
+
+        card.querySelectorAll(".spot-choice").forEach((b) => {
+            b.classList.toggle("picked", b.dataset.answer === picked);
+        });
+
+        verdict.textContent =
+            (data.correct ? "✓ Correct! " : "✗ Not quite. ") +
+            (data.is_phishing
+                ? "This was a phishing attempt."
+                : "This one was legitimate.");
+        verdict.className = "spot-verdict " + (data.correct ? "good" : "bad");
+
+        // Build the list with textContent so admin-written text can never inject HTML.
+        flags.replaceChildren();
+        (data.red_flags || []).forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            flags.appendChild(li);
+        });
+
+        saved.textContent = data.saved
+            ? "Saved to your history — refresh to update your accuracy."
+            : "Log in to save your answers and track your accuracy.";
+
+        result.hidden = false;
+    }
+
+    // ---- Delete scenario (admin) confirmation ----
+    (function () {
+        const dialog = document.getElementById("spot-delete-dialog");
+        if (!dialog) return;
+
+        let pendingForm = null;
+
+        document.addEventListener("click", function (event) {
+            const trigger = event.target.closest(".spot-delete-trigger");
+
+            if (trigger) {
+                pendingForm = trigger.closest("form");
+                dialog.showModal();
+                return;
+            }
+
+            if (event.target.id === "cancel-spot-delete") {
+                dialog.close();
+                pendingForm = null;
+            }
+
+            if (event.target.id === "confirm-spot-delete" && pendingForm) {
+                const form = pendingForm;
+                pendingForm = null;
+                dialog.close();
+                sessionScroll();
+                form.submit();
+            }
+        });
+    })();
+
+    // ---- Clear my history confirmation ----
+    (function () {
+        const dialog = document.getElementById("spot-clear-dialog");
+        if (!dialog) return;
+
+        let pendingForm = null;
+
+        document.addEventListener("click", function (event) {
+            const trigger = event.target.closest(".spot-clear-trigger");
+
+            if (trigger) {
+                pendingForm = trigger.closest("form");
+                dialog.showModal();
+                return;
+            }
+
+            if (event.target.id === "cancel-spot-clear") {
+                dialog.close();
+                pendingForm = null;
+            }
+
+            if (event.target.id === "confirm-spot-clear" && pendingForm) {
+                const form = pendingForm;
+                pendingForm = null;
+                dialog.close();
+                sessionScroll();
+                form.submit();
+            }
+        });
+    })();
+})();
