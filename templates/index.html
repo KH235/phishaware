@@ -163,8 +163,8 @@
         ⌕ &nbsp; URL Scanner
     </a>
 
-    <a href="#intel">
-        ▤ &nbsp; Threat Database
+    <a href="#site-directory">
+        ▤ &nbsp; Official Site Directory
     </a>
 
     <a href="#community">
@@ -342,496 +342,358 @@
 
             </section>
 
-            <!-- THREAT DATABASE -->
+            <!-- ==========================================
+                 MODULE 2 — OFFICIAL SITE DIRECTORY
+                 ========================================== -->
 
-            <section class="panel dashboard-section" id="intel">
+{% macro site_fields(s=none) %}
+    <label>Brand name</label>
+    <input
+        type="text"
+        name="brand"
+        maxlength="120"
+        placeholder="e.g. Maybank"
+        value="{{ s.brand if s else '' }}"
+        required
+    >
+
+    <label>Official domain</label>
+    <input
+        type="text"
+        name="domain"
+        maxlength="253"
+        placeholder="e.g. maybank2u.com.my"
+        value="{{ s.domain if s else '' }}"
+        required
+    >
+
+    <label>Category</label>
+    <select name="category" required>
+        {% for c in site_categories %}
+        <option value="{{ c }}" {% if s and s.category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Official contact <span class="optional-tag">(optional — phone, email or support page)</span></label>
+    <input
+        type="text"
+        name="contact"
+        maxlength="255"
+        value="{{ s.contact if s and s.contact else '' }}"
+    >
+{% endmacro %}
+
+            <section class="panel dashboard-section" id="site-directory">
 
                 <div class="panel-heading">
-
                     <h3>
-
                         <span class="green">▥</span>
-
-                        Threat Database
-
+                        Official Site Directory
                     </h3>
                 </div>
 
-    <!-- MODULE 2: ADD THREAT FORM -->
-
-    <p class="subtle threat-intro">
-
-        Help the PhishAware community by reporting suspicious
-
-        URLs and potential phishing threats.
-
-    </p>
-
-    {% if current_user.is_authenticated %}
-
-    <details class="threat-create-toggle">
-    <summary>＋ Report a New Threat</summary>
-    <form
-
-        method="POST"
-
-        action="{{ url_for('add_threat') }}"
-
-        class="threat-form"
-
-    >
-
-        <!-- CSRF protection -->
-
-        <input
-
-            type="hidden"
-
-            name="csrf_token"
-
-            value="{{ csrf_token() }}"
-
-        >
-
-        <label for="threat-url">Suspicious URL</label>
-
-        <input
-
-            type="url"
-
-            id="threat-url"
-
-            name="url"
-
-            placeholder="https://suspicious-example.com"
-
-            maxlength="2048"
-
-            required
-
-        >
-
-        <label for="threat-type">Threat Type</label>
-
-        <select id="threat-type" name="threat_type" required>
-
-            <option value="">Select a threat type</option>
-
-            <option value="Phishing">Phishing</option>
-
-            <option value="Fake Login Page">Fake Login Page</option>
-
-            <option value="Scam Website">Scam Website</option>
-
-            <option value="Malware Distribution">Malware Distribution</option>
-
-            <option value="Other">Other</option>
-
-        </select>
-
-        <label for="threat-risk">Risk Level</label>
-
-        <select id="threat-risk" name="risk_level" required>
-
-            <option value="">Select risk level</option>
-
-            <option value="LOW">LOW</option>
-
-            <option value="MEDIUM">MEDIUM</option>
-
-            <option value="HIGH">HIGH</option>
-
-        </select>
-
-        <label for="threat-description">Description</label>
-
-        <textarea
-
-            id="threat-description"
-
-            name="description"
-
-            rows="4"
-
-            maxlength="2000"
-
-            placeholder="Describe why this URL appears suspicious..."
-
-        ></textarea>
-
-        <button type="submit" class="threat-submit-btn">
-
-            + Submit Threat Report
-
-        </button>
-
-    </form>
-
-    </details>
-
-    {% else %}
-
-    <p class="threat-login-message">
-
-        <a href="{{ url_for('login') }}">
-
-            Login
-
-        </a>
-
-        or
-
-        <a href="{{ url_for('register') }}">
-
-            Sign Up
-
-        </a>
-
-        to submit a threat report.
-
-    </p>
-
-    {% endif %}
-
-<!-- MODULE 2: COMMUNITY THREAT RECORDS -->
-
-<div class="threat-records">
-
-    <div class="threat-records-header">
-
-        <h3>▤ Community Threat Records</h3>
-
-        <span>{{ threats|length }} RECORDS</span>
-
-    </div>
-
-    {% if threats %}
-
-<!-- Threat Search and Filter -->
-
-<div class="threat-search-controls">
-
-    <input
-
-        type="search"
-
-        id="threat-search"
-
-        placeholder="⌕ Search URLs, threat types, keywords..."
-
-        aria-label="Search community threats"
-
-    >
-
-    <select id="threat-risk-filter" aria-label="Filter threats by risk level">
-
-        <option value="ALL">All Risk Levels</option>
-
-        <option value="HIGH">High Risk</option>
-
-        <option value="MEDIUM">Medium Risk</option>
-
-        <option value="LOW">Low Risk</option>
-
-    </select>
-
-    <select id="threat-status-filter" aria-label="Filter threats by verification status">
-
-        <option value="ALL">All Statuses</option>
-
-        <option value="Verified">Verified</option>
-
-        <option value="Unverified">Unverified</option>
-
-    </select>
-
-</div>
-
-<p id="threat-search-count" class="threat-search-count"></p>
-
-<p id="threat-no-results" class="threat-empty" hidden>
-
-    No matching threats found. Try another search.
-
-</p>
-
-        <div class="threat-list">
-
-            {% for threat in threats %}
-
-            <article
-
-                class="threat-card"
-
-                data-risk="{{ threat.risk_level }}"
-
-                data-status="{{ threat.status or 'Unverified' }}"
-
-            >
-
-                <div class="threat-card-top">
-
-                    <span class="threat-risk {{ threat.risk_level|lower }}">
-
-                        {{ threat.risk_level }}
-
-                    </span>
-
-                    <span class="threat-type">
-
-                        {{ threat.threat_type }}
-
-                    </span>
-
-                    <span class="threat-status {{ 'verified' if threat.status == 'Verified' else 'unverified' }}">
-                        {{ '✔ Verified' if threat.status == 'Verified' else '○ Unverified' }}
-                    </span>
+                <p class="subtle dir-intro">
+                    A list of genuine websites for banks, e-wallets, delivery
+                    companies and government services. Before you log in,
+                    search the brand and compare the address with the one in
+                    your browser. Type the address yourself rather than
+                    clicking links in messages.
+                </p>
+
+                <!-- ADDRESS CHECKER -->
+                <div class="dir-checker">
+                    <label for="dir-check-input">Check a website address</label>
+                    <div class="dir-checker-row">
+                        <input
+                            type="text"
+                            id="dir-check-input"
+                            placeholder="Paste the address you are about to log in to..."
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                        <button type="button" id="dir-check-btn">Check</button>
+                    </div>
+                    <div id="dir-check-result" class="dir-check-result" hidden></div>
+                </div>
+
+                <!-- ADMIN: ADD ENTRY -->
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                <details class="community-create-toggle dir-toggle">
+                    <summary>＋ Add Official Site</summary>
+
+                    <div class="community-publish">
+                        <form
+                            method="POST"
+                            action="{{ url_for('add_official_site') }}"
+                            class="community-post-form"
+                        >
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                            {{ site_fields() }}
+
+                            <button type="submit" class="community-publish-btn">
+                                + Add to Directory
+                            </button>
+                        </form>
+                    </div>
+                </details>
+                {% endif %}
+
+                <!-- SEARCH AND FILTER -->
+                <div class="threat-search-controls dir-controls">
+                    <input
+                        type="search"
+                        id="dir-search"
+                        placeholder="⌕ Search brand or domain..."
+                        aria-label="Search the official site directory"
+                    >
+
+                    <select id="dir-category-filter" aria-label="Filter by category">
+                        <option value="ALL">All Categories</option>
+                        {% for c in site_categories %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <p id="dir-count" class="threat-search-count"></p>
+
+                <p id="dir-no-results" class="community-posts-empty" hidden>
+                    No matching entries. The brand may not be listed yet —
+                    you can suggest it below.
+                </p>
+
+                <!-- APPROVED ENTRIES -->
+                {% if directory_entries %}
+
+                <div class="dir-list">
+
+                    {% for site in directory_entries %}
+
+                    <article
+                        class="dir-card"
+                        data-category="{{ site.category }}"
+                        data-brand="{{ site.brand }}"
+                        data-domain="{{ site.domain }}"
+                    >
+                        <div class="dir-card-top">
+                            <h4 class="dir-brand">{{ site.brand }}</h4>
+                            <span class="dir-category">{{ site.category }}</span>
+                        </div>
+
+                        <div class="dir-domain">{{ site.domain }}</div>
+
+                        {% if site.contact %}
+                        <div class="dir-contact">☎ {{ site.contact }}</div>
+                        {% endif %}
+
+                        {% if current_user.is_authenticated and current_user.is_admin %}
+                        <div class="dir-admin">
+
+                            <details class="community-edit-details">
+                                <summary class="community-edit-toggle">✎ Edit Entry</summary>
+
+                                <form
+                                    method="POST"
+                                    action="{{ url_for('edit_official_site', site_id=site.site_id) }}"
+                                    class="community-post-form community-edit-form"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                    {{ site_fields(site) }}
+
+                                    <button type="submit" class="community-publish-btn">
+                                        ✓ Save Changes
+                                    </button>
+                                </form>
+                            </details>
+
+                            <form
+                                method="POST"
+                                action="{{ url_for('delete_official_site', site_id=site.site_id) }}"
+                                class="community-delete-form"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                <button type="button" class="community-delete-btn dir-delete-trigger">
+                                    🗑 Delete Entry
+                                </button>
+                            </form>
+
+                        </div>
+                        {% endif %}
+                    </article>
+
+                    {% endfor %}
 
                 </div>
 
-                <div class="threat-url">
+                {% else %}
 
-                    {{ threat.url }}
-
-                </div>
-
-                <details class="threat-view-details">
-    <summary>View Details</summary>
-    <div class="threat-details-content">
-
-                {% if threat.description %}
-
-                <p class="threat-description">
-
-                    {{ threat.description }}
-
+                <p class="community-posts-empty">
+                    The directory is empty.
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                    Add the first official site above.
+                    {% else %}
+                    An administrator will add entries soon.
+                    {% endif %}
                 </p>
 
                 {% endif %}
 
-                <div class="threat-meta">
+                <!-- SUGGEST A MISSING BRAND -->
+                <details class="community-create-toggle dir-toggle">
+                    <summary>＋ Suggest a Missing Brand</summary>
 
-                    <span>
+                    <div class="community-publish">
 
-                        Reported by:
+                        {% if current_user.is_authenticated %}
 
-                        {{ threat.reported_by or 'Unknown User' }}
+                        <p class="subtle">
+                            Only suggest websites you are sure are genuine. An
+                            administrator reviews every suggestion before it
+                            appears in the directory.
+                        </p>
 
-                    </span>
+                        <form
+                            method="POST"
+                            action="{{ url_for('suggest_official_site') }}"
+                            class="community-post-form"
+                        >
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-                    <span>
+                            {{ site_fields() }}
 
-                        {{ threat.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                            <button type="submit" class="community-publish-btn">
+                                + Submit Suggestion
+                            </button>
+                        </form>
 
-                    </span>
+                        {% else %}
+
+                        <p class="community-login-message">
+                            <a href="{{ url_for('login') }}">Login</a>
+                            or
+                            <a href="{{ url_for('register') }}">Sign Up</a>
+                            to suggest a missing brand.
+                        </p>
+
+                        {% endif %}
+
+                    </div>
+                </details>
+
+                <!-- PENDING SUGGESTIONS -->
+                {% if current_user.is_authenticated and directory_pending %}
+
+                <div class="dir-pending">
+
+                    <h4>
+                        {% if current_user.is_admin %}
+                        ⏳ Pending Suggestions ({{ directory_pending|length }})
+                        {% else %}
+                        ⏳ My Pending Suggestions
+                        {% endif %}
+                    </h4>
+
+                    {% for site in directory_pending %}
+
+                    <article class="dir-card dir-card-pending">
+                        <div class="dir-card-top">
+                            <h4 class="dir-brand">{{ site.brand }}</h4>
+                            <span class="dir-category">{{ site.category }}</span>
+                            <span class="dir-pending-tag">Pending</span>
+                        </div>
+
+                        <div class="dir-domain">{{ site.domain }}</div>
+
+                        {% if site.contact %}
+                        <div class="dir-contact">☎ {{ site.contact }}</div>
+                        {% endif %}
+
+                        {% if current_user.is_admin %}
+
+                        <div class="dir-meta">
+                            Suggested by {{ site.suggested_by_name or 'a deleted user' }}
+                            · {{ site.created_at.strftime('%d %b %Y') }}
+                        </div>
+
+                        <div class="dir-admin">
+
+                            <form
+                                method="POST"
+                                action="{{ url_for('approve_official_site', site_id=site.site_id) }}"
+                                class="dir-approve-form"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="threat-status-btn verify">
+                                    ✔ Approve
+                                </button>
+                            </form>
+
+                            <details class="community-edit-details">
+                                <summary class="community-edit-toggle">✎ Edit Before Approving</summary>
+
+                                <form
+                                    method="POST"
+                                    action="{{ url_for('edit_official_site', site_id=site.site_id) }}"
+                                    class="community-post-form community-edit-form"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                    {{ site_fields(site) }}
+
+                                    <button type="submit" class="community-publish-btn">
+                                        ✓ Save Changes
+                                    </button>
+                                </form>
+                            </details>
+
+                            <form
+                                method="POST"
+                                action="{{ url_for('delete_official_site', site_id=site.site_id) }}"
+                                class="community-delete-form"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                <button type="button" class="community-delete-btn dir-delete-trigger">
+                                    🗑 Reject &amp; Delete
+                                </button>
+                            </form>
+
+                        </div>
+
+                        {% else %}
+
+                        <div class="dir-admin">
+                            <form
+                                method="POST"
+                                action="{{ url_for('withdraw_official_site', site_id=site.site_id) }}"
+                                class="community-delete-form"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                <button type="button" class="community-delete-btn dir-withdraw-trigger">
+                                    ↩ Withdraw Suggestion
+                                </button>
+                            </form>
+                        </div>
+
+                        {% endif %}
+                    </article>
+
+                    {% endfor %}
 
                 </div>
 
-<!-- ADMIN ONLY: verify / unverify this entry -->
-
-{% if current_user.is_authenticated and current_user.is_admin %}
-<form
-    method="POST"
-    action="{{ url_for('set_threat_status', threat_id=threat.threat_id) }}"
-    class="threat-status-form"
->
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-    {% if threat.status == 'Verified' %}
-    <input type="hidden" name="status" value="Unverified">
-    <button type="submit" class="threat-status-btn unverify">
-        ○ Mark as Unverified
-    </button>
-    {% else %}
-    <input type="hidden" name="status" value="Verified">
-    <button type="submit" class="threat-status-btn verify">
-        ✔ Mark as Verified
-    </button>
-    {% endif %}
-</form>
-{% endif %}
-
-<!-- EDIT THREAT: Only visible to the report owner -->
-
-{% if current_user.is_authenticated and threat.reported_by_id == current_user.id|int %}
-
-<div class="threat-actions">
-<details class="threat-edit-details">
-
-    <summary class="threat-edit-toggle">
-
-        ✎ Edit My Report
-
-    </summary>
-
-    <form
-
-        method="POST"
-
-        action="{{ url_for('edit_threat', threat_id=threat.threat_id) }}"
-
-        class="threat-form threat-edit-form"
-
-    >
-
-        <input
-
-            type="hidden"
-
-            name="csrf_token"
-
-            value="{{ csrf_token() }}"
-
-        >
-
-        <label>Suspicious URL</label>
-
-        <input
-
-            type="url"
-
-            name="url"
-
-            value="{{ threat.url }}"
-
-            maxlength="2048"
-
-            required
-
-        >
-
-        <label>Threat Type</label>
-
-        <select name="threat_type" required>
-
-            {% for type in [
-
-                'Phishing',
-
-                'Fake Login Page',
-
-                'Scam Website',
-
-                'Malware Distribution',
-
-                'Other'
-
-            ] %}
-
-            <option
-
-                value="{{ type }}"
-
-                {% if threat.threat_type == type %}selected{% endif %}
-
-            >
-
-                {{ type }}
-
-            </option>
-
-            {% endfor %}
-
-        </select>
-
-        <label>Risk Level</label>
-
-        <select name="risk_level" required>
-
-            {% for level in ['LOW', 'MEDIUM', 'HIGH'] %}
-
-            <option
-
-                value="{{ level }}"
-
-                {% if threat.risk_level == level %}selected{% endif %}
-
-            >
-
-                {{ level }}
-
-            </option>
-
-            {% endfor %}
-
-        </select>
-
-        <label>Description</label>
-
-        <textarea
-
-            name="description"
-
-            rows="4"
-
-            maxlength="2000"
-
-        >{{ threat.description or '' }}</textarea>
-
-        <button type="submit" class="threat-submit-btn">
-
-            Save Changes
-
-        </button>
-
-    </form>
-
-</details>
-
-<!-- DELETE THREAT: Only visible to the report owner -->
-
-<form
-
-    method="POST"
-
-    action="{{ url_for('delete_threat', threat_id=threat.threat_id) }}"
-
-    class="threat-delete-form"
-
-
-
->
-
-    <input
-
-        type="hidden"
-
-        name="csrf_token"
-
-        value="{{ csrf_token() }}"
-
-    >
-
-    <button type="button" class="threat-delete-btn threat-delete-trigger">
-    🗑 Delete My Report
-</button>
-
-</form>
-
-</div>
-
-{% endif %}
-          </div>
-            </details>
-            </article>
-
-            {% endfor %}
-
-        </div>
-
-    {% else %}
-
-        <div class="threat-empty">
-
-            No threats have been reported yet.
-
-            Be the first to submit one!
-
-        </div>
-
-    {% endif %}
-
-</div>
+                {% endif %}
+
+                <p class="subtle dir-disclaimer">
+                    A domain missing from this list does not mean a site is
+                    unsafe, and a match does not replace your own care: never
+                    share passwords or one-time codes with anyone who contacts
+                    you first.
+                </p>
 
             </section>
 
@@ -2468,9 +2330,9 @@
         </div>
 
         <div class="system-status-row">
-            <span>Threat Intelligence</span>
+            <span>Site Directory</span>
             <span class="system-status-value">
-                Community Database
+                Official Sites
             </span>
         </div>
 
@@ -2505,30 +2367,7 @@
     </div>
 
 
-<dialog id="threat-delete-dialog" class="threat-delete-dialog">
-    <div class="delete-dialog-content">
-        <h3>⚠ Delete Threat Report?</h3>
 
-        <p>
-            Are you sure you want to permanently delete
-            this threat report?
-        </p>
-
-        <p class="delete-warning">
-            This action cannot be undone.
-        </p>
-
-        <div class="delete-dialog-actions">
-            <button type="button" id="cancel-threat-delete">
-                Cancel
-            </button>
-
-            <button type="button" id="confirm-threat-delete">
-                🗑 Delete Report
-            </button>
-        </div>
-    </div>
-</dialog>
 
 
     <!-- DASHBOARD JAVASCRIPT -->
@@ -2592,6 +2431,31 @@
 
     </div>
 
+</dialog>
+
+<!-- MODULE 2 — DIRECTORY: DELETE ENTRY -->
+<dialog id="dir-delete-dialog" class="threat-delete-dialog">
+    <div class="delete-dialog-content">
+        <h3>⚠ Delete This Entry?</h3>
+        <p>This removes the entry from the Official Site Directory.</p>
+        <p class="delete-warning">This action cannot be undone.</p>
+        <div class="delete-dialog-actions">
+            <button type="button" id="cancel-dir-delete">Cancel</button>
+            <button type="button" id="confirm-dir-delete">🗑 Delete Entry</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- MODULE 2 — DIRECTORY: WITHDRAW SUGGESTION -->
+<dialog id="dir-withdraw-dialog" class="threat-delete-dialog">
+    <div class="delete-dialog-content">
+        <h3>↩ Withdraw Suggestion?</h3>
+        <p>Your pending suggestion will be removed. You can submit it again later.</p>
+        <div class="delete-dialog-actions">
+            <button type="button" id="cancel-dir-withdraw">Cancel</button>
+            <button type="button" id="confirm-dir-withdraw">↩ Withdraw</button>
+        </div>
+    </div>
 </dialog>
 
 <!-- MODULE 5 — SPOT THE PHISH: DELETE SCENARIO -->
