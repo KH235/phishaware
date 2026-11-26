@@ -2,6 +2,7 @@ import ipaddress
 import json
 import os
 import re
+from datetime import date
 from urllib.parse import urlsplit
 from flask_wtf.csrf import CSRFProtect
 
@@ -116,8 +117,11 @@ def home():
     threats = []
     community_posts = []
     comments_by_post = {}
-    incident_reports = []
     verification_requests = []
+    spot_scenarios = []
+    spot_history = []
+    spot_last = {}
+    spot_stats = {"total": 0, "correct": 0, "accuracy": 0}
     cyber_lessons = []
     quiz_questions = []
     quiz_history = []
@@ -142,6 +146,7 @@ def home():
                 t.risk_level,
                 t.description,
                 t.created_at,
+                t.status,
                 t.reported_by AS reported_by_id,
                 u.username AS reported_by
             FROM threat_intelligence AS t
@@ -165,7 +170,10 @@ def home():
                 p.content,
                 p.created_at,
                 p.updated_at,
-                u.username AS author
+                p.incident_date,
+                p.is_anonymous,
+                CASE WHEN p.is_anonymous THEN NULL
+                     ELSE u.username END AS author
             FROM community_posts AS p
             LEFT JOIN users AS u
                 ON p.user_id = u.user_id
@@ -202,28 +210,82 @@ def home():
 
 
         # ==========================================
-        # MODULE 5 — LOAD PUBLIC INCIDENT REPORTS
+        # MODULE 5 — LOAD SPOT THE PHISH SCENARIOS
         # ==========================================
+        # Only admins receive the answer key. For everyone else the
+        # answer and the red-flag explanation stay on the server until
+        # the scenario has been answered.
 
-        cursor.execute("""
-            SELECT
-                i.incident_id,
-                i.user_id,
-                i.title,
-                i.incident_type,
-                i.description,
-                i.incident_date,
-                i.status,
-                i.created_at,
-                i.updated_at,
-                u.username AS reported_by
-            FROM incident_reports AS i
-            LEFT JOIN users AS u ON i.user_id = u.user_id
-            ORDER BY i.created_at DESC, i.incident_id DESC
-            LIMIT 50
+        if current_user.is_authenticated and current_user.is_admin:
+            scenario_columns = """
+                scenario_id, title, scenario_type, sender, subject, body,
+                is_phishing, red_flags, created_at, updated_at
+            """
+        else:
+            scenario_columns = """
+                scenario_id, title, scenario_type, sender, subject, body
+            """
+
+        cursor.execute(f"""
+            SELECT {scenario_columns}
+            FROM spot_phish_scenarios
+            ORDER BY scenario_id ASC
+            LIMIT 100
         """)
 
-        incident_reports = cursor.fetchall()
+        spot_scenarios = cursor.fetchall()
+
+        if current_user.is_authenticated:
+            cursor.execute("""
+                SELECT
+                    a.answer_id,
+                    a.scenario_id,
+                    a.user_answer,
+                    a.is_correct,
+                    a.answered_at,
+                    s.title,
+                    s.scenario_type
+                FROM spot_phish_answers AS a
+                JOIN spot_phish_scenarios AS s
+                    ON s.scenario_id = a.scenario_id
+                WHERE a.user_id = %s
+                ORDER BY a.answered_at DESC, a.answer_id DESC
+                LIMIT 20
+            """, (current_user.id,))
+
+            spot_history = cursor.fetchall()
+
+            cursor.execute("""
+                SELECT DISTINCT ON (scenario_id)
+                    scenario_id, is_correct
+                FROM spot_phish_answers
+                WHERE user_id = %s
+                ORDER BY scenario_id, answered_at DESC, answer_id DESC
+            """, (current_user.id,))
+
+            spot_last = {
+                row["scenario_id"]: row["is_correct"]
+                for row in cursor.fetchall()
+            }
+
+            cursor.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE is_correct) AS correct
+                FROM spot_phish_answers
+                WHERE user_id = %s
+            """, (current_user.id,))
+
+            stats_row = cursor.fetchone()
+
+            if stats_row and stats_row["total"]:
+                spot_stats = {
+                    "total": stats_row["total"],
+                    "correct": stats_row["correct"],
+                    "accuracy": round(
+                        stats_row["correct"] * 100 / stats_row["total"]
+                    ),
+                }
 
         # ==========================================
         # MODULE 6 — LOAD VERIFICATION REQUESTS
@@ -405,7 +467,13 @@ def home():
            threats=threats,
            community_posts=community_posts,
            comments_by_post=comments_by_post,
-           incident_reports=incident_reports,
+           spot_scenarios=spot_scenarios,
+           spot_history=spot_history,
+           spot_last=spot_last,
+           spot_stats=spot_stats,
+           now_date=date.today().isoformat(),
+           post_categories=POST_CATEGORIES,
+           incident_category=INCIDENT_CATEGORY,
            verification_requests=verification_requests,
            cyber_lessons=cyber_lessons,
            quiz_questions=quiz_questions,
@@ -759,7 +827,7 @@ EMAIL_PATTERN = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 PROFILE_STAT_TABLES = (
     ('posts', 'community_posts'),
     ('comments', 'community_comments'),
-    ('incidents', 'incident_reports'),
+    ('spot_answers', 'spot_phish_answers'),
     ('verifications', 'threat_verifications'),
     ('scans', 'url_scans'),
     ('quiz_attempts', 'quiz_scores'),
@@ -775,7 +843,7 @@ def delete_user_and_data(cursor, user_id):
     # (ON DELETE CASCADE on community_comments.post_id).
     cursor.execute('DELETE FROM community_comments WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM community_posts WHERE user_id = %s', (user_id,))
-    cursor.execute('DELETE FROM incident_reports WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM spot_phish_answers WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM threat_verifications WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM quiz_scores WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM url_scans WHERE user_id = %s', (user_id,))
@@ -1251,7 +1319,8 @@ def edit_threat(threat_id):
             SET url = %s,
                 threat_type = %s,
                 risk_level = %s,
-                description = %s
+                description = %s,
+                status = 'Unverified'
             WHERE threat_id = %s
               AND reported_by = %s
             """,
@@ -1329,32 +1398,123 @@ def delete_threat(threat_id):
 
 
 # ==========================================
-# MODULE 3 — CREATE COMMUNITY POST
+# MODULE 2 — ADMIN VERIFY / UNVERIFY THREAT
+# ==========================================
+
+@app.post("/threats/<int:threat_id>/status")
+@login_required
+def set_threat_status(threat_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    status = request.form.get("status", "").strip()
+
+    if status not in ("Verified", "Unverified"):
+        return "Invalid status.", 400
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "UPDATE threat_intelligence SET status = %s WHERE threat_id = %s",
+            (status, threat_id),
+        )
+
+        updated = cursor.rowcount
+        connection.commit()
+
+        if updated == 0:
+            return "Threat report not found.", 404
+
+        return redirect(url_for("home") + "#intel")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to update threat status")
+        return "Unable to update threat status. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# COMMUNITY & INCIDENT POSTS — SHARED HELPERS
+# ==========================================
+
+INCIDENT_CATEGORY = "I experienced an incident"
+
+POST_CATEGORIES = (
+    "Phishing Alert",
+    "Scam Warning",
+    "Malware Alert",
+    "Security Tips",
+    "General Discussion",
+    INCIDENT_CATEGORY,
+)
+
+
+def read_post_form():
+    """
+    Validate the post form shared by "create" and "edit".
+    Returns (data, error). `error` is None when the form is valid.
+    """
+    title = request.form.get("title", "").strip()
+    category = request.form.get("category", "").strip()
+    content = request.form.get("content", "").strip()
+    incident_date_raw = request.form.get("incident_date", "").strip()
+    is_anonymous = request.form.get("is_anonymous") == "on"
+
+    if not title or len(title) > 200:
+        return None, "Please enter a valid post title (maximum 200 characters)."
+
+    if category not in POST_CATEGORIES:
+        return None, "Please select a valid post category."
+
+    if not content or len(content) > 10000:
+        return None, "Post content must contain between 1 and 10000 characters."
+
+    incident_date = None
+
+    # The incident date only applies to incident posts, and it is optional.
+    if category == INCIDENT_CATEGORY and incident_date_raw:
+        try:
+            incident_date = date.fromisoformat(incident_date_raw)
+        except ValueError:
+            return None, "Please enter a valid incident date."
+
+        if incident_date > date.today():
+            return None, "The incident date cannot be in the future."
+
+    return {
+        "title": title,
+        "category": category,
+        "content": content,
+        "incident_date": incident_date,
+        "is_anonymous": is_anonymous,
+    }, None
+
+
+# ==========================================
+# MODULE 3 — CREATE POST (community + incident)
 # ==========================================
 
 @app.post("/community/posts/add")
 @login_required
 def add_community_post():
-    title = request.form.get("title", "").strip()
-    category = request.form.get("category", "").strip()
-    content = request.form.get("content", "").strip()
+    data, error = read_post_form()
 
-    allowed_categories = (
-        "Phishing Alert",
-        "Scam Warning",
-        "Malware Alert",
-        "Security Tips",
-        "General Discussion",
-    )
-
-    if not title or len(title) > 200:
-        return "Please enter a valid post title (maximum 200 characters).", 400
-
-    if category not in allowed_categories:
-        return "Please select a valid post category.", 400
-
-    if not content or len(content) > 10000:
-        return "Post content must contain between 1 and 10000 characters.", 400
+    if error:
+        return error, 400
 
     connection = None
     cursor = None
@@ -1366,14 +1526,17 @@ def add_community_post():
         cursor.execute(
             """
             INSERT INTO community_posts
-                (user_id, title, category, content)
-            VALUES (%s, %s, %s, %s)
+                (user_id, title, category, content,
+                 incident_date, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (
                 int(current_user.id),
-                title,
-                category,
-                content,
+                data["title"],
+                data["category"],
+                data["content"],
+                data["incident_date"],
+                data["is_anonymous"],
             ),
         )
 
@@ -1397,32 +1560,16 @@ def add_community_post():
 
 
 # ==========================================
-# MODULE 3 — EDIT COMMUNITY POST
+# MODULE 3 — EDIT POST
 # ==========================================
 
 @app.post("/community/posts/<int:post_id>/edit")
 @login_required
 def edit_community_post(post_id):
-    title = request.form.get("title", "").strip()
-    category = request.form.get("category", "").strip()
-    content = request.form.get("content", "").strip()
+    data, error = read_post_form()
 
-    allowed_categories = (
-        "Phishing Alert",
-        "Scam Warning",
-        "Malware Alert",
-        "Security Tips",
-        "General Discussion",
-    )
-
-    if not title or len(title) > 200:
-        return "Please enter a valid post title (maximum 200 characters).", 400
-
-    if category not in allowed_categories:
-        return "Please select a valid post category.", 400
-
-    if not content or len(content) > 10000:
-        return "Post content must contain between 1 and 10000 characters.", 400
+    if error:
+        return error, 400
 
     connection = None
     cursor = None
@@ -1431,37 +1578,34 @@ def edit_community_post(post_id):
         connection = get_db_connection()
         cursor = connection.cursor()
 
-        # Check ownership before editing.
-        cursor.execute(
-            """
-            SELECT post_id
-            FROM community_posts
-            WHERE post_id = %s AND user_id = %s
-            """,
-            (post_id, int(current_user.id)),
-        )
-
-        if cursor.fetchone() is None:
-            return "Post not found or permission denied.", 404
-
+        # Only the owner can edit; rowcount tells us whether it matched.
         cursor.execute(
             """
             UPDATE community_posts
             SET title = %s,
                 category = %s,
-                content = %s
+                content = %s,
+                incident_date = %s,
+                is_anonymous = %s,
+                updated_at = NOW()
             WHERE post_id = %s AND user_id = %s
             """,
             (
-                title,
-                category,
-                content,
+                data["title"],
+                data["category"],
+                data["content"],
+                data["incident_date"],
+                data["is_anonymous"],
                 post_id,
                 int(current_user.id),
             ),
         )
 
+        updated = cursor.rowcount
         connection.commit()
+
+        if updated == 0:
+            return "Post not found or permission denied.", 404
 
         return redirect(url_for("home") + "#community")
 
@@ -1724,44 +1868,67 @@ def delete_community_comment(comment_id):
 
 
 # ==========================================
-# MODULE 5 — ADD INCIDENT REPORT
+# MODULE 5 — SPOT THE PHISH
 # ==========================================
 
-@app.post("/incidents/add")
-@login_required
-def add_incident():
-    title = request.form.get("title", "").strip()
-    incident_type = request.form.get("incident_type", "").strip()
-    description = request.form.get("description", "").strip()
-    incident_date = request.form.get("incident_date", "").strip()
+SPOT_TYPES = ("Email", "SMS", "Login Page")
 
-    valid_types = {
-        "Phishing",
-        "Online Scam",
-        "Account Compromise",
-        "Malware",
-        "Identity Theft",
-        "Other"
-    }
+
+def read_scenario_form():
+    """Validate the admin scenario form. Returns (data, error)."""
+    title = request.form.get("title", "").strip()
+    scenario_type = request.form.get("scenario_type", "").strip()
+    sender = request.form.get("sender", "").strip()
+    subject = request.form.get("subject", "").strip()
+    body = request.form.get("body", "").strip()
+    verdict = request.form.get("verdict", "").strip()
+    red_flags = request.form.get("red_flags", "").strip()
 
     if not title or len(title) > 200:
-        return "Title must contain between 1 and 200 characters.", 400
+        return None, "Title must contain between 1 and 200 characters."
 
-    if incident_type not in valid_types:
-        return "Please select a valid incident type.", 400
+    if scenario_type not in SPOT_TYPES:
+        return None, "Please select a valid scenario type."
 
-    if not description:
-        return "Incident description is required.", 400
+    if not sender or len(sender) > 255:
+        return None, "Sender / address must contain between 1 and 255 characters."
 
-    try:
-        from datetime import date
-        parsed_date = date.fromisoformat(incident_date)
+    if len(subject) > 255:
+        return None, "Subject must be 255 characters or fewer."
 
-        if parsed_date > date.today():
-            return "Incident date cannot be in the future.", 400
+    if not body or len(body) > 5000:
+        return None, "Message content must contain between 1 and 5000 characters."
 
-    except ValueError:
-        return "Please enter a valid incident date.", 400
+    if verdict not in ("phishing", "legit"):
+        return None, "Please choose whether this scenario is phishing or legitimate."
+
+    if not red_flags or len(red_flags) > 3000:
+        return None, "Please explain the red flags (maximum 3000 characters)."
+
+    return {
+        "title": title,
+        "scenario_type": scenario_type,
+        "sender": sender,
+        # Only emails have a subject line.
+        "subject": subject if scenario_type == "Email" else "",
+        "body": body,
+        "is_phishing": verdict == "phishing",
+        "red_flags": red_flags,
+    }, None
+
+
+# ---- CREATE (admin) ----
+
+@app.post("/spot-the-phish/scenarios/add")
+@login_required
+def add_spot_scenario():
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    data, error = read_scenario_form()
+
+    if error:
+        return error, 400
 
     connection = None
     cursor = None
@@ -1772,29 +1939,32 @@ def add_incident():
 
         cursor.execute(
             """
-            INSERT INTO incident_reports
-                (user_id, title, incident_type, description, incident_date)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO spot_phish_scenarios
+                (title, scenario_type, sender, subject, body,
+                 is_phishing, red_flags)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                int(current_user.id),
-                title,
-                incident_type,
-                description,
-                incident_date
-            )
+                data["title"],
+                data["scenario_type"],
+                data["sender"],
+                data["subject"],
+                data["body"],
+                data["is_phishing"],
+                data["red_flags"],
+            ),
         )
 
         connection.commit()
 
-        return redirect(url_for("home") + "#incident-reports")
+        return redirect(url_for("home") + "#spot-the-phish")
 
     except Error:
         if connection is not None:
             connection.rollback()
 
-        app.logger.exception("Failed to submit incident report")
-        return "Unable to submit incident report. Please try again.", 500
+        app.logger.exception("Failed to add Spot the Phish scenario")
+        return "Unable to add the scenario. Please try again.", 500
 
     finally:
         if cursor is not None:
@@ -1804,93 +1974,65 @@ def add_incident():
             connection.close()
 
 
-# ==========================================
-# MODULE 5 — EDIT INCIDENT REPORT
-# ==========================================
+# ---- UPDATE (admin) ----
 
-@app.post("/incidents/<int:incident_id>/edit")
+@app.post("/spot-the-phish/scenarios/<int:scenario_id>/edit")
 @login_required
-def edit_incident(incident_id):
-    title = request.form.get("title", "").strip()
-    incident_type = request.form.get("incident_type", "").strip()
-    description = request.form.get("description", "").strip()
-    incident_date = request.form.get("incident_date", "").strip()
+def edit_spot_scenario(scenario_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
 
-    valid_types = {
-        "Phishing",
-        "Online Scam",
-        "Account Compromise",
-        "Malware",
-        "Identity Theft",
-        "Other"
-    }
+    data, error = read_scenario_form()
 
-    if not title or len(title) > 200:
-        return "Title must contain between 1 and 200 characters.", 400
-
-    if incident_type not in valid_types:
-        return "Please select a valid incident type.", 400
-
-    if not description:
-        return "Incident description is required.", 400
-
-    try:
-        from datetime import date
-        parsed_date = date.fromisoformat(incident_date)
-
-        if parsed_date > date.today():
-            return "Incident date cannot be in the future.", 400
-    except ValueError:
-        return "Please enter a valid incident date.", 400
+    if error:
+        return error, 400
 
     connection = None
     cursor = None
 
     try:
         connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        cursor.execute(
-            "SELECT user_id FROM incident_reports WHERE incident_id = %s",
-            (incident_id,)
-        )
-
-        incident = cursor.fetchone()
-
-        if incident is None:
-            return "Incident report not found.", 404
-
-        if int(incident["user_id"]) != int(current_user.id):
-            return "You can only edit your own incident reports.", 403
+        cursor = connection.cursor()
 
         cursor.execute(
             """
-            UPDATE incident_reports
+            UPDATE spot_phish_scenarios
             SET title = %s,
-                incident_type = %s,
-                description = %s,
-                incident_date = %s
-            WHERE incident_id = %s AND user_id = %s
+                scenario_type = %s,
+                sender = %s,
+                subject = %s,
+                body = %s,
+                is_phishing = %s,
+                red_flags = %s,
+                updated_at = NOW()
+            WHERE scenario_id = %s
             """,
             (
-                title,
-                incident_type,
-                description,
-                incident_date,
-                incident_id,
-                int(current_user.id)
-            )
+                data["title"],
+                data["scenario_type"],
+                data["sender"],
+                data["subject"],
+                data["body"],
+                data["is_phishing"],
+                data["red_flags"],
+                scenario_id,
+            ),
         )
 
+        updated = cursor.rowcount
         connection.commit()
-        return redirect(url_for("home") + "#incident-reports")
+
+        if updated == 0:
+            return "Scenario not found.", 404
+
+        return redirect(url_for("home") + "#spot-the-phish")
 
     except Error:
         if connection is not None:
             connection.rollback()
 
-        app.logger.exception("Failed to edit incident report")
-        return "Unable to update incident report. Please try again.", 500
+        app.logger.exception("Failed to edit Spot the Phish scenario")
+        return "Unable to update the scenario. Please try again.", 500
 
     finally:
         if cursor is not None:
@@ -1900,13 +2042,66 @@ def edit_incident(incident_id):
             connection.close()
 
 
-# ==========================================
-# MODULE 5 — DELETE INCIDENT REPORT
-# ==========================================
+# ---- DELETE (admin) ----
 
-@app.post("/incidents/<int:incident_id>/delete")
+@app.post("/spot-the-phish/scenarios/<int:scenario_id>/delete")
 @login_required
-def delete_incident(incident_id):
+def delete_spot_scenario(scenario_id):
+    if not current_user.is_admin:
+        return "Administrator access required.", 403
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Answer records for this scenario are removed too
+        # (ON DELETE CASCADE on spot_phish_answers.scenario_id).
+        cursor.execute(
+            "DELETE FROM spot_phish_scenarios WHERE scenario_id = %s",
+            (scenario_id,),
+        )
+
+        deleted = cursor.rowcount
+        connection.commit()
+
+        if deleted == 0:
+            return "Scenario not found.", 404
+
+        return redirect(url_for("home") + "#spot-the-phish")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to delete Spot the Phish scenario")
+        return "Unable to delete the scenario. Please try again.", 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ---- CREATE answer record (any user) ----
+
+@app.post("/spot-the-phish/scenarios/<int:scenario_id>/answer")
+@limiter.limit("60 per minute")
+def answer_spot_scenario(scenario_id):
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict) or payload.get("answer") not in (
+        "phishing",
+        "legit",
+    ):
+        return jsonify(success=False, message="Invalid answer."), 400
+
+    said_phishing = payload["answer"] == "phishing"
+
     connection = None
     cursor = None
 
@@ -1914,43 +2109,98 @@ def delete_incident(incident_id):
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
-        # Check whether the incident exists and who owns it.
         cursor.execute(
             """
-            SELECT user_id
-            FROM incident_reports
-            WHERE incident_id = %s
+            SELECT is_phishing, red_flags
+            FROM spot_phish_scenarios
+            WHERE scenario_id = %s
             """,
-            (incident_id,)
+            (scenario_id,),
         )
 
-        incident = cursor.fetchone()
+        scenario = cursor.fetchone()
 
-        if incident is None:
-            return "Incident report not found.", 404
+        if scenario is None:
+            return jsonify(success=False, message="Scenario not found."), 404
 
-        if int(incident["user_id"]) != int(current_user.id):
-            return "You can only delete your own incident reports.", 403
+        is_correct = bool(scenario["is_phishing"]) == said_phishing
+        saved = False
 
-        # Delete only the selected incident.
-        cursor.execute(
-            """
-            DELETE FROM incident_reports
-            WHERE incident_id = %s AND user_id = %s
-            """,
-            (incident_id, int(current_user.id))
+        # Only logged-in users get a saved history.
+        if current_user.is_authenticated:
+            cursor.execute(
+                """
+                INSERT INTO spot_phish_answers
+                    (user_id, scenario_id, user_answer, is_correct)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (
+                    int(current_user.id),
+                    scenario_id,
+                    said_phishing,
+                    is_correct,
+                ),
+            )
+            connection.commit()
+            saved = True
+
+        return jsonify(
+            success=True,
+            correct=is_correct,
+            is_phishing=bool(scenario["is_phishing"]),
+            red_flags=[
+                line.strip()
+                for line in scenario["red_flags"].splitlines()
+                if line.strip()
+            ],
+            saved=saved,
         )
-
-        connection.commit()
-
-        return redirect(url_for("home") + "#incident-reports")
 
     except Error:
         if connection is not None:
             connection.rollback()
 
-        app.logger.exception("Failed to delete incident report")
-        return "Unable to delete incident report. Please try again.", 500
+        app.logger.exception("Failed to record Spot the Phish answer")
+        return jsonify(
+            success=False,
+            message="Unable to check your answer. Please try again.",
+        ), 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ---- DELETE own history (any logged-in user) ----
+
+@app.post("/spot-the-phish/history/clear")
+@login_required
+def clear_spot_history():
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "DELETE FROM spot_phish_answers WHERE user_id = %s",
+            (int(current_user.id),),
+        )
+
+        connection.commit()
+
+        return redirect(url_for("home") + "#spot-the-phish")
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to clear Spot the Phish history")
+        return "Unable to clear your history. Please try again.", 500
 
     finally:
         if cursor is not None:
