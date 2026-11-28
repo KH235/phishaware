@@ -2052,7 +2052,8 @@
     Submit Quiz
 </button>
 
-<div id="quiz-results" class="quiz-results" hidden aria-live="polite"></div>
+<div id="quiz-results" class="quiz-results" hidden aria-live="polite"
+     data-user-name="{{ current_user.username if current_user.is_authenticated else '' }}"></div>
 
 
 <!-- MODULE 8 — MY QUIZ HISTORY -->
