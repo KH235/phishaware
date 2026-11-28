@@ -4587,3 +4587,59 @@ body {
         padding: 12px;
     }
 }
+
+
+/* ==========================================
+   SECURITY QUIZ — PDF DOWNLOAD
+   ========================================== */
+
+#security-quiz .quiz-result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+#security-quiz .quiz-result-actions .quiz-retake-btn {
+    margin-top: 0;
+}
+
+#security-quiz .quiz-pdf-btn {
+    padding: 12px 22px;
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+    border: 1px solid #00ff88;
+    border-radius: 9px;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#security-quiz .quiz-pdf-btn:hover:not(:disabled) {
+    background: #00ff88;
+    color: #090b0f;
+}
+
+#security-quiz .quiz-pdf-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+#security-quiz .quiz-pdf-name {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 11px 14px;
+    background: #090d13;
+    border: 1px solid #344253;
+    border-radius: 9px;
+    color: #e7eaf0;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    outline: none;
+}
+
+#security-quiz .quiz-pdf-name:focus {
+    border-color: #00ff88;
+}
