@@ -910,7 +910,76 @@ retakeButton.addEventListener("click", function () {
     });
 });
 
-resultsContainer.appendChild(retakeButton);
+/* Download result as PDF (name, score, date, wrong answers + explanations) */
+
+const actions = document.createElement("div");
+actions.className = "quiz-result-actions";
+
+let guestNameInput = null;
+
+if (!resultsContainer.dataset.userName) {
+    guestNameInput = document.createElement("input");
+    guestNameInput.type = "text";
+    guestNameInput.maxLength = 60;
+    guestNameInput.className = "quiz-pdf-name";
+    guestNameInput.placeholder = "Your name (shown on the PDF)";
+    guestNameInput.setAttribute("aria-label", "Your name for the PDF");
+    actions.appendChild(guestNameInput);
+}
+
+const pdfButton = document.createElement("button");
+pdfButton.type = "button";
+pdfButton.className = "quiz-pdf-btn";
+pdfButton.textContent = "⬇ Download Result (PDF)";
+
+pdfButton.addEventListener("click", async function () {
+    pdfButton.disabled = true;
+    pdfButton.textContent = "Preparing PDF...";
+
+    try {
+        const pdfResponse = await fetch("/quiz/result-pdf", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": document.querySelector('meta[name="csrf-token"]')?.content
+            },
+            body: JSON.stringify({
+                answers: answers,
+                name: guestNameInput ? guestNameInput.value : ""
+            })
+        });
+
+        if (!pdfResponse.ok) {
+            let message = "Unable to create the PDF.";
+
+            try {
+                message = (await pdfResponse.json()).message || message;
+            } catch (e) {}
+
+            throw new Error(message);
+        }
+
+        const blob = await pdfResponse.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.href = url;
+        link.download = "PhishAware-Quiz-Result.pdf";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        pdfButton.disabled = false;
+        pdfButton.textContent = "⬇ Download Result (PDF)";
+    }
+});
+
+actions.append(pdfButton, retakeButton);
+resultsContainer.appendChild(actions);
 
             resultsContainer.hidden = false;
             resultsContainer.scrollIntoView({ behavior: "smooth", block: "start" });
