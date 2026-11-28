@@ -133,6 +133,9 @@ def home():
     spot_history = []
     spot_last = {}
     spot_stats = {"total": 0, "correct": 0, "accuracy": 0}
+    spot_daily = {"enabled": False}
+    spot_leaderboard = []
+    incident_chart = {"labels": [], "series": [], "total": 0}
     cyber_lessons = []
     quiz_questions = []
     quiz_history = []
@@ -228,18 +231,53 @@ def home():
                 p.created_at,
                 p.updated_at,
                 p.incident_date,
+                p.incident_type,
                 p.is_anonymous,
                 CASE WHEN p.is_anonymous THEN NULL
-                     ELSE u.username END AS author
+                     ELSE u.username END AS author,
+                (
+                    SELECT COUNT(*)
+                    FROM incident_me_too AS m
+                    WHERE m.post_id = p.post_id
+                ) AS me_too_count,
+                EXISTS (
+                    SELECT 1
+                    FROM incident_me_too AS m2
+                    WHERE m2.post_id = p.post_id AND m2.user_id = %s
+                ) AS me_too_by_me
             FROM community_posts AS p
             LEFT JOIN users AS u
                 ON p.user_id = u.user_id
             ORDER BY p.created_at DESC, p.post_id DESC
             LIMIT 50
-            """
+            """,
+            (int(current_user.id) if current_user.is_authenticated else 0,),
         )
 
         community_posts = cursor.fetchall()
+
+        # Incident types per month (last 6 months) for the chart.
+        today_my = malaysia_today()
+        first_month = today_my.replace(day=1)
+
+        for _ in range(5):
+            first_month = (first_month - timedelta(days=1)).replace(day=1)
+
+        cursor.execute(
+            """
+            SELECT
+                TO_CHAR(COALESCE(p.incident_date, p.created_at::date), 'YYYY-MM') AS month,
+                p.incident_type,
+                COUNT(*) AS total
+            FROM community_posts AS p
+            WHERE p.category = %s
+              AND COALESCE(p.incident_date, p.created_at::date) >= %s
+            GROUP BY 1, 2
+            """,
+            (INCIDENT_CATEGORY, first_month),
+        )
+
+        incident_chart = build_incident_chart(cursor.fetchall(), today_my)
 
 
         # MODULE 4 — Load comments for community posts
@@ -343,6 +381,174 @@ def home():
                         stats_row["correct"] * 100 / stats_row["total"]
                     ),
                 }
+
+        # ==========================================
+        # SPOT THE PHISH — DAILY CHALLENGE + LEADERBOARD
+        # ==========================================
+
+        today = malaysia_today()
+
+        cursor.execute(
+            "SELECT COUNT(*) AS c FROM spot_daily_challenge WHERE challenge_date = %s",
+            (today,),
+        )
+
+        if cursor.fetchone()["c"] == 0:
+            # First visit of the day: lock in today's scenarios for everyone.
+            cursor.execute(
+                """
+                INSERT INTO spot_daily_challenge (challenge_date, scenario_id, position)
+                SELECT %s::date, t.scenario_id, (ROW_NUMBER() OVER (ORDER BY t.h))::int
+                FROM (
+                    SELECT scenario_id, md5(%s || scenario_id::text) AS h
+                    FROM spot_phish_scenarios
+                    ORDER BY h
+                    LIMIT %s
+                ) AS t
+                ON CONFLICT DO NOTHING
+                """,
+                (today, today.isoformat(), DAILY_SIZE),
+            )
+            connection.commit()
+
+        cursor.execute(
+            """
+            SELECT
+                s.scenario_id, s.title, s.scenario_type, s.sender,
+                s.subject, s.body, s.is_phishing, s.red_flags, d.position
+            FROM spot_daily_challenge AS d
+            JOIN spot_phish_scenarios AS s ON s.scenario_id = d.scenario_id
+            WHERE d.challenge_date = %s
+            ORDER BY d.position ASC
+            """,
+            (today,),
+        )
+
+        daily_rows = cursor.fetchall()
+
+        my_daily_answers = {}
+        streak_now = 0
+        streak_best = 0
+
+        if current_user.is_authenticated:
+            cursor.execute(
+                """
+                SELECT scenario_id, user_answer, is_correct
+                FROM spot_daily_answers
+                WHERE user_id = %s AND challenge_date = %s
+                """,
+                (int(current_user.id), today),
+            )
+
+            my_daily_answers = {
+                row["scenario_id"]: row for row in cursor.fetchall()
+            }
+
+            cursor.execute(
+                """
+                SELECT challenge_date
+                FROM spot_daily_results
+                WHERE user_id = %s
+                ORDER BY challenge_date DESC
+                LIMIT 400
+                """,
+                (int(current_user.id),),
+            )
+
+            streak_now, streak_best = compute_streaks(
+                [row["challenge_date"] for row in cursor.fetchall()], today
+            )
+
+        daily_items = []
+
+        for row in daily_rows:
+            item = dict(row)
+            answer = my_daily_answers.get(row["scenario_id"])
+
+            if answer is not None:
+                item["answered"] = True
+                item["user_answer"] = answer["user_answer"]
+                item["is_correct"] = answer["is_correct"]
+                item["flags"] = [
+                    line.strip()
+                    for line in (row["red_flags"] or "").splitlines()
+                    if line.strip()
+                ]
+            else:
+                # Never send the answer key for scenarios not yet answered.
+                item["answered"] = False
+                item["is_phishing"] = None
+                item["red_flags"] = None
+                item["flags"] = []
+
+            daily_items.append(item)
+
+        answered_count = sum(1 for item in daily_items if item["answered"])
+
+        spot_daily = {
+            "enabled": len(daily_items) > 0,
+            "date_label": today.strftime("%d %b %Y"),
+            "scenarios": daily_items,
+            "answered": answered_count,
+            "total": len(daily_items),
+            "completed": len(daily_items) > 0 and answered_count == len(daily_items),
+            "correct": sum(1 for item in daily_items if item.get("is_correct")),
+            "streak": streak_now,
+            "best": streak_best,
+        }
+
+        cursor.execute(
+            """
+            WITH numbered AS (
+                SELECT
+                    user_id,
+                    challenge_date,
+                    challenge_date - (
+                        ROW_NUMBER() OVER (
+                            PARTITION BY user_id ORDER BY challenge_date
+                        )
+                    )::int AS grp
+                FROM spot_daily_results
+            ),
+            streaks AS (
+                SELECT user_id, COUNT(*) AS streak, MAX(challenge_date) AS last_day
+                FROM numbered
+                GROUP BY user_id, grp
+            )
+            SELECT
+                u.username,
+                st.user_id,
+                st.streak,
+                (
+                    SELECT COALESCE(SUM(r.correct_count), 0)
+                    FROM spot_daily_results AS r
+                    WHERE r.user_id = st.user_id
+                ) AS total_correct,
+                (
+                    SELECT r2.correct_count || '/' || r2.total_questions
+                    FROM spot_daily_results AS r2
+                    WHERE r2.user_id = st.user_id AND r2.challenge_date = %s
+                ) AS today_score
+            FROM streaks AS st
+            JOIN users AS u ON u.user_id = st.user_id
+            WHERE st.last_day >= %s - 1
+            ORDER BY st.streak DESC, total_correct DESC, u.username ASC
+            LIMIT 10
+            """,
+            (today, today),
+        )
+
+        spot_leaderboard = [
+            {
+                "username": row["username"],
+                "streak": row["streak"],
+                "total_correct": row["total_correct"],
+                "today_score": row["today_score"],
+                "is_me": current_user.is_authenticated
+                and row["user_id"] == int(current_user.id),
+            }
+            for row in cursor.fetchall()
+        ]
 
         # ==========================================
         # MODULE 7 — LOAD CYBER LEARNING LESSONS
@@ -502,6 +708,10 @@ def home():
            community_posts=community_posts,
            comments_by_post=comments_by_post,
            spot_scenarios=spot_scenarios,
+           spot_daily=spot_daily,
+           spot_leaderboard=spot_leaderboard,
+           incident_chart=incident_chart,
+           incident_types=INCIDENT_TYPES,
            spot_history=spot_history,
            spot_last=spot_last,
            spot_stats=spot_stats,
@@ -873,6 +1083,9 @@ def delete_user_and_data(cursor, user_id):
     """
     # Comments on this user's posts are removed automatically
     # (ON DELETE CASCADE on community_comments.post_id).
+    cursor.execute('DELETE FROM incident_me_too WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM spot_daily_answers WHERE user_id = %s', (user_id,))
+    cursor.execute('DELETE FROM spot_daily_results WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM community_comments WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM community_posts WHERE user_id = %s', (user_id,))
     cursor.execute('DELETE FROM spot_phish_answers WHERE user_id = %s', (user_id,))
@@ -1747,10 +1960,100 @@ def withdraw_official_site(site_id):
 
 
 # ==========================================
+# SHARED DATE / STREAK HELPERS
+# ==========================================
+
+DAILY_SIZE = 5
+
+
+def malaysia_today():
+    """Today's date in Malaysia (UTC+8, no daylight saving)."""
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def compute_streaks(days, today):
+    """
+    days: iterable of dates on which the user completed the daily challenge.
+    Returns (current_streak, best_streak). A streak is still alive if the
+    user finished yesterday and has not played today yet.
+    """
+    done = set(days)
+    current = 0
+    day = today if today in done else today - timedelta(days=1)
+
+    while day in done:
+        current += 1
+        day -= timedelta(days=1)
+
+    best = 0
+    run = 0
+    previous = None
+
+    for day in sorted(done):
+        if previous is not None and (day - previous).days == 1:
+            run += 1
+        else:
+            run = 1
+
+        best = max(best, run)
+        previous = day
+
+    return current, best
+
+
+def build_incident_chart(rows, today):
+    """Incident posts per month (last 6 months), grouped by incident type."""
+    keys = []
+    labels = []
+
+    for back in range(5, -1, -1):
+        year, month = today.year, today.month - back
+
+        while month <= 0:
+            month += 12
+            year -= 1
+
+        keys.append(f"{year:04d}-{month:02d}")
+        labels.append(date(year, month, 1).strftime("%b %Y"))
+
+    series = {kind: [0] * 6 for kind in INCIDENT_TYPES}
+
+    for row in rows:
+        kind = row["incident_type"]
+
+        if kind not in series:
+            kind = "Other"
+
+        if row["month"] in keys:
+            series[kind][keys.index(row["month"])] += int(row["total"])
+
+    used = [
+        {"type": kind, "counts": counts}
+        for kind, counts in series.items()
+        if sum(counts) > 0
+    ]
+
+    return {
+        "labels": labels,
+        "series": used,
+        "total": sum(sum(item["counts"]) for item in used),
+    }
+
+
+# ==========================================
 # COMMUNITY & INCIDENT POSTS — SHARED HELPERS
 # ==========================================
 
 INCIDENT_CATEGORY = "I experienced an incident"
+
+INCIDENT_TYPES = (
+    "Phishing",
+    "Online Scam",
+    "Account Compromise",
+    "Malware",
+    "Identity Theft",
+    "Other",
+)
 
 POST_CATEGORIES = (
     "Phishing Alert",
@@ -1771,6 +2074,7 @@ def read_post_form():
     category = request.form.get("category", "").strip()
     content = request.form.get("content", "").strip()
     incident_date_raw = request.form.get("incident_date", "").strip()
+    incident_type = request.form.get("incident_type", "").strip()
     is_anonymous = request.form.get("is_anonymous") == "on"
 
     if not title or len(title) > 200:
@@ -1783,6 +2087,13 @@ def read_post_form():
         return None, "Post content must contain between 1 and 10000 characters."
 
     incident_date = None
+
+    # Incident posts need an incident type (used for the monthly chart).
+    if category == INCIDENT_CATEGORY:
+        if incident_type not in INCIDENT_TYPES:
+            return None, "Please select the incident type."
+    else:
+        incident_type = None
 
     # The incident date only applies to incident posts, and it is optional.
     if category == INCIDENT_CATEGORY and incident_date_raw:
@@ -1799,6 +2110,7 @@ def read_post_form():
         "category": category,
         "content": content,
         "incident_date": incident_date,
+        "incident_type": incident_type,
         "is_anonymous": is_anonymous,
     }, None
 
@@ -1826,8 +2138,8 @@ def add_community_post():
             """
             INSERT INTO community_posts
                 (user_id, title, category, content,
-                 incident_date, is_anonymous)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                 incident_date, incident_type, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 int(current_user.id),
@@ -1835,6 +2147,7 @@ def add_community_post():
                 data["category"],
                 data["content"],
                 data["incident_date"],
+                data["incident_type"],
                 data["is_anonymous"],
             ),
         )
@@ -1885,6 +2198,7 @@ def edit_community_post(post_id):
                 category = %s,
                 content = %s,
                 incident_date = %s,
+                incident_type = %s,
                 is_anonymous = %s,
                 updated_at = NOW()
             WHERE post_id = %s AND user_id = %s
@@ -1894,6 +2208,7 @@ def edit_community_post(post_id):
                 data["category"],
                 data["content"],
                 data["incident_date"],
+                data["incident_type"],
                 data["is_anonymous"],
                 post_id,
                 int(current_user.id),
@@ -3024,6 +3339,247 @@ def submit_security_quiz():
             "success": False,
             "message": "Unable to score quiz. Please try again."
         }), 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# INCIDENT POSTS — "THIS HAPPENED TO ME TOO"
+# ==========================================
+
+@app.post("/community/posts/<int:post_id>/me-too")
+@limiter.limit("60 per minute")
+def toggle_me_too(post_id):
+    if not current_user.is_authenticated:
+        return jsonify(
+            success=False, message="Please log in to use this button."
+        ), 401
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT user_id, category FROM community_posts WHERE post_id = %s",
+            (post_id,),
+        )
+
+        post = cursor.fetchone()
+
+        if post is None:
+            return jsonify(success=False, message="Post not found."), 404
+
+        if post["category"] != INCIDENT_CATEGORY:
+            return jsonify(
+                success=False, message="This button is only for incident posts."
+            ), 400
+
+        if post["user_id"] == int(current_user.id):
+            return jsonify(
+                success=False,
+                message="You cannot add this to your own incident post.",
+            ), 400
+
+        cursor.execute(
+            "DELETE FROM incident_me_too WHERE post_id = %s AND user_id = %s",
+            (post_id, int(current_user.id)),
+        )
+
+        if cursor.rowcount == 0:
+            cursor.execute(
+                """
+                INSERT INTO incident_me_too (post_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (post_id, int(current_user.id)),
+            )
+            active = True
+        else:
+            active = False
+
+        cursor.execute(
+            "SELECT COUNT(*) AS c FROM incident_me_too WHERE post_id = %s",
+            (post_id,),
+        )
+
+        count = cursor.fetchone()["c"]
+        connection.commit()
+
+        return jsonify(success=True, active=active, count=count)
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to toggle 'me too'")
+        return jsonify(
+            success=False, message="Something went wrong. Please try again."
+        ), 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+# ==========================================
+# SPOT THE PHISH — DAILY CHALLENGE ANSWER
+# ==========================================
+
+@app.post("/spot-the-phish/daily/<int:scenario_id>/answer")
+@limiter.limit("60 per minute")
+def answer_daily_scenario(scenario_id):
+    if not current_user.is_authenticated:
+        return jsonify(
+            success=False,
+            message="Please log in to play the daily challenge.",
+        ), 401
+
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict) or payload.get("answer") not in (
+        "phishing",
+        "legit",
+    ):
+        return jsonify(success=False, message="Invalid answer."), 400
+
+    said_phishing = payload["answer"] == "phishing"
+    today = malaysia_today()
+    user_id = int(current_user.id)
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT s.is_phishing, s.red_flags
+            FROM spot_daily_challenge AS d
+            JOIN spot_phish_scenarios AS s ON s.scenario_id = d.scenario_id
+            WHERE d.challenge_date = %s AND d.scenario_id = %s
+            """,
+            (today, scenario_id),
+        )
+
+        scenario = cursor.fetchone()
+
+        if scenario is None:
+            return jsonify(
+                success=False,
+                message="That scenario is not in today's challenge. Please refresh the page.",
+            ), 404
+
+        is_correct = bool(scenario["is_phishing"]) == said_phishing
+
+        cursor.execute(
+            """
+            INSERT INTO spot_daily_answers
+                (user_id, challenge_date, scenario_id, user_answer, is_correct)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (user_id, today, scenario_id, said_phishing, is_correct),
+        )
+
+        if cursor.rowcount == 0:
+            connection.rollback()
+            return jsonify(
+                success=False,
+                message="You already answered this scenario today.",
+            ), 409
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS answered,
+                COUNT(*) FILTER (WHERE is_correct) AS correct
+            FROM spot_daily_answers
+            WHERE user_id = %s AND challenge_date = %s
+            """,
+            (user_id, today),
+        )
+
+        mine = cursor.fetchone()
+
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM spot_daily_challenge WHERE challenge_date = %s",
+            (today,),
+        )
+
+        total = cursor.fetchone()["total"]
+        completed = mine["answered"] >= total
+
+        if completed:
+            cursor.execute(
+                """
+                INSERT INTO spot_daily_results
+                    (user_id, challenge_date, correct_count, total_questions)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (user_id, today, mine["correct"], total),
+            )
+
+        connection.commit()
+
+        cursor.execute(
+            """
+            SELECT challenge_date
+            FROM spot_daily_results
+            WHERE user_id = %s
+            ORDER BY challenge_date DESC
+            LIMIT 400
+            """,
+            (user_id,),
+        )
+
+        streak, best = compute_streaks(
+            [row["challenge_date"] for row in cursor.fetchall()], today
+        )
+
+        return jsonify(
+            success=True,
+            correct=is_correct,
+            is_phishing=bool(scenario["is_phishing"]),
+            red_flags=[
+                line.strip()
+                for line in (scenario["red_flags"] or "").splitlines()
+                if line.strip()
+            ],
+            note="Answer locked in for today.",
+            progress={
+                "answered": mine["answered"],
+                "total": total,
+                "correct": mine["correct"],
+                "completed": completed,
+                "streak": streak,
+                "best": best,
+            },
+        )
+
+    except Error:
+        if connection is not None:
+            connection.rollback()
+
+        app.logger.exception("Failed to record daily challenge answer")
+        return jsonify(
+            success=False,
+            message="Unable to save your answer. Please try again.",
+        ), 500
 
     finally:
         if cursor is not None:
