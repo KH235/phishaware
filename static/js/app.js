@@ -1241,10 +1241,17 @@ document.addEventListener("DOMContentLoaded", function () {
         const isIncident = select.value === field.dataset.incidentCategory;
         field.hidden = !isIncident;
 
-        // Never send a stale date for non-incident posts.
+        const typeSelect = field.querySelector(".incident-type-select");
+
+        if (typeSelect) {
+            typeSelect.required = isIncident;
+        }
+
+        // Never send stale incident details for non-incident posts.
         if (!isIncident) {
             const dateInput = field.querySelector('input[type="date"]');
             if (dateInput) dateInput.value = "";
+            if (typeSelect) typeSelect.value = "";
         }
     }
 
@@ -1347,11 +1354,42 @@ document.addEventListener("DOMContentLoaded", function () {
             flags.appendChild(li);
         });
 
-        saved.textContent = data.saved
-            ? "Saved to your history — refresh to update your accuracy."
-            : "Log in to save your answers and track your accuracy.";
+        saved.textContent =
+            data.note ||
+            (data.saved
+                ? "Saved to your history — refresh to update your accuracy."
+                : "Log in to save your answers and track your accuracy.");
 
         result.hidden = false;
+
+        if (data.progress) {
+            updateDailyProgress(data.progress);
+        }
+    }
+
+    // Daily challenge: update the progress bar, streak and completion banner.
+    function updateDailyProgress(progress) {
+        const answered = document.getElementById("daily-answered");
+        const bar = document.getElementById("daily-bar");
+        const streak = document.getElementById("daily-streak-now");
+        const best = document.getElementById("daily-best");
+        const complete = document.getElementById("daily-complete");
+        const score = document.getElementById("daily-score");
+
+        if (answered) answered.textContent = progress.answered;
+
+        if (bar && progress.total) {
+            bar.style.width =
+                Math.round((progress.answered * 100) / progress.total) + "%";
+        }
+
+        if (streak) streak.textContent = progress.streak;
+        if (best) best.textContent = progress.best;
+
+        if (complete && progress.completed) {
+            if (score) score.textContent = progress.correct;
+            complete.hidden = false;
+        }
     }
 
     // ---- Delete scenario (admin) confirmation ----
@@ -1415,4 +1453,476 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
     })();
+})();
+
+
+
+// ==========================================
+// INCIDENT REPORTS — "THIS HAPPENED TO ME TOO" + MONTHLY CHART
+// ==========================================
+
+(function () {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    // ---- "This happened to me too" toggle ----
+    document.addEventListener("click", async function (event) {
+        const button = event.target.closest(".metoo-btn");
+
+        if (!button || button.disabled) return;
+
+        button.disabled = true;
+
+        try {
+            const response = await fetch(button.dataset.url, {
+                method: "POST",
+                headers: { "X-CSRFToken": csrf },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || "Something went wrong.");
+            }
+
+            button.classList.toggle("active", data.active);
+            button.setAttribute("aria-pressed", data.active ? "true" : "false");
+            button.querySelector(".metoo-count").textContent = data.count;
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    // ---- Stacked bar chart: incident types per month ----
+    const holder = document.getElementById("incident-chart");
+    const dataEl = document.getElementById("incident-chart-data");
+
+    if (!holder || !dataEl) return;
+
+    let chart;
+
+    try {
+        chart = JSON.parse(dataEl.textContent);
+    } catch (error) {
+        return;
+    }
+
+    if (!chart.total) {
+        const empty = document.createElement("p");
+        empty.className = "community-no-comments";
+        empty.textContent = "No incident reports in the last 6 months yet.";
+        holder.appendChild(empty);
+        return;
+    }
+
+    const COLORS = {
+        "Phishing": "#ff6878",
+        "Online Scam": "#ffbe3c",
+        "Account Compromise": "#a66eff",
+        "Malware": "#38bdf8",
+        "Identity Theft": "#f472b6",
+        "Other": "#8f99a8",
+    };
+
+    const NS = "http://www.w3.org/2000/svg";
+
+    function svg(tag, attrs, text) {
+        const node = document.createElementNS(NS, tag);
+        Object.entries(attrs || {}).forEach(([k, v]) => node.setAttribute(k, v));
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    const width = 640;
+    const height = 280;
+    const pad = { top: 16, right: 12, bottom: 34, left: 34 };
+    const plotW = width - pad.left - pad.right;
+    const plotH = height - pad.top - pad.bottom;
+
+    const months = chart.labels.length;
+    const totals = chart.labels.map((_, i) =>
+        chart.series.reduce((sum, s) => sum + s.counts[i], 0)
+    );
+
+    const maxTotal = Math.max(1, ...totals);
+    const step = maxTotal <= 5 ? 1 : Math.ceil(maxTotal / 5);
+    const top = Math.ceil(maxTotal / step) * step;
+
+    const root = svg("svg", {
+        viewBox: `0 0 ${width} ${height}`,
+        role: "img",
+        "aria-label": "Stacked bar chart of incident types per month",
+        class: "incident-chart-svg",
+    });
+
+    // Grid lines + y labels
+    for (let value = 0; value <= top; value += step) {
+        const y = pad.top + plotH - (value / top) * plotH;
+
+        root.appendChild(svg("line", {
+            x1: pad.left, x2: width - pad.right, y1: y, y2: y,
+            stroke: "#263140", "stroke-width": 1,
+        }));
+
+        root.appendChild(svg("text", {
+            x: pad.left - 6, y: y + 4, "text-anchor": "end",
+            fill: "#8f99a8", "font-size": 11,
+        }, String(value)));
+    }
+
+    const slot = plotW / months;
+    const barW = Math.min(54, slot * 0.6);
+
+    chart.labels.forEach((label, i) => {
+        const x = pad.left + slot * i + (slot - barW) / 2;
+        let yCursor = pad.top + plotH;
+
+        chart.series.forEach((series) => {
+            const count = series.counts[i];
+            if (!count) return;
+
+            const h = (count / top) * plotH;
+            yCursor -= h;
+
+            const rect = svg("rect", {
+                x, y: yCursor, width: barW, height: h,
+                fill: COLORS[series.type] || COLORS["Other"],
+                rx: 2,
+            });
+
+            rect.appendChild(svg("title", {}, `${label} — ${series.type}: ${count}`));
+            root.appendChild(rect);
+        });
+
+        if (totals[i]) {
+            root.appendChild(svg("text", {
+                x: x + barW / 2, y: yCursor - 5, "text-anchor": "middle",
+                fill: "#e7eaf0", "font-size": 11, "font-weight": "bold",
+            }, String(totals[i])));
+        }
+
+        root.appendChild(svg("text", {
+            x: x + barW / 2, y: height - 12, "text-anchor": "middle",
+            fill: "#aeb8c5", "font-size": 11,
+        }, label));
+    });
+
+    holder.appendChild(root);
+
+    // Legend
+    const legend = document.createElement("div");
+    legend.className = "incident-chart-legend";
+
+    chart.series.forEach((series) => {
+        const item = document.createElement("span");
+        const swatch = document.createElement("i");
+        swatch.style.background = COLORS[series.type] || COLORS["Other"];
+        item.append(swatch, document.createTextNode(series.type));
+        legend.appendChild(item);
+    });
+
+    holder.appendChild(legend);
+})();
+
+
+// ==========================================
+// URL SCANNER — QR CODE SCANNING
+// Everything runs in the browser; images are never uploaded.
+// ==========================================
+
+(function () {
+    const scanForm = document.getElementById("scan-form");
+    const urlInput = document.getElementById("url");
+    const uploadBtn = document.getElementById("qr-upload-btn");
+    const fileInput = document.getElementById("qr-file");
+    const cameraBtn = document.getElementById("qr-camera-btn");
+    const stopBtn = document.getElementById("qr-camera-stop");
+    const panel = document.getElementById("qr-camera-panel");
+    const video = document.getElementById("qr-video");
+    const statusEl = document.getElementById("qr-status");
+
+    if (!scanForm || !urlInput || !uploadBtn || !fileInput || !cameraBtn) return;
+
+    const JSQR_SOURCES = [
+        "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js",
+        "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
+    ];
+
+    let jsQRPromise = null;
+    let nativeDetector = null;
+    let stream = null;
+    let timer = null;
+    let busy = false;
+
+    if ("BarcodeDetector" in window) {
+        try {
+            nativeDetector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        } catch (error) {
+            nativeDetector = null;
+        }
+    }
+
+    function setStatus(message, kind) {
+        statusEl.hidden = false;
+        statusEl.className = "qr-status " + (kind || "");
+        statusEl.textContent = message;
+    }
+
+    function loadJsQR() {
+        if (window.jsQR) return Promise.resolve(window.jsQR);
+        if (jsQRPromise) return jsQRPromise;
+
+        jsQRPromise = new Promise(function (resolve, reject) {
+            let index = 0;
+
+            function next() {
+                if (index >= JSQR_SOURCES.length) {
+                    reject(new Error("QR reader could not be loaded."));
+                    return;
+                }
+
+                const script = document.createElement("script");
+                script.src = JSQR_SOURCES[index++];
+                script.onload = function () {
+                    window.jsQR ? resolve(window.jsQR) : next();
+                };
+                script.onerror = function () {
+                    script.remove();
+                    next();
+                };
+                document.head.appendChild(script);
+            }
+
+            next();
+        });
+
+        jsQRPromise.catch(function () { jsQRPromise = null; });
+        return jsQRPromise;
+    }
+
+    // Try to read a QR code from a canvas. Returns the text or null.
+    async function decodeCanvas(canvas) {
+        if (nativeDetector) {
+            try {
+                const codes = await nativeDetector.detect(canvas);
+
+                if (codes.length && codes[0].rawValue) {
+                    return codes[0].rawValue;
+                }
+            } catch (error) {
+                /* fall back to jsQR below */
+            }
+        }
+
+        let jsQR;
+
+        try {
+            jsQR = await loadJsQR();
+        } catch (error) {
+            throw error;
+        }
+
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        const image = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(image.data, image.width, image.height, {
+            inversionAttempts: "attemptBoth",
+        });
+
+        return code && code.data ? code.data : null;
+    }
+
+    function drawScaled(source, sourceW, sourceH, maxSide) {
+        const scale = Math.min(1, maxSide / Math.max(sourceW, sourceH));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(sourceW * scale));
+        canvas.height = Math.max(1, Math.round(sourceH * scale));
+        canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+        return canvas;
+    }
+
+    // What to do with the text found inside the QR code.
+    function handleQrText(text) {
+        const value = String(text).trim();
+
+        if (!value) {
+            setStatus("The QR code was empty.", "warn");
+            return;
+        }
+
+        const looksLikeUrl =
+            /^https?:\/\//i.test(value) ||
+            /^[a-z0-9-]+(\.[a-z0-9-]+)+\.?([:\/?#]|$)/i.test(value);
+
+        if (!looksLikeUrl || value.length > 2048) {
+            const preview = value.length > 80 ? value.slice(0, 80) + "…" : value;
+            setStatus(
+                "This QR code does not contain a web address, so nothing was scanned. It contains: " + preview,
+                "warn"
+            );
+            return;
+        }
+
+        stopCamera();
+        urlInput.value = value;
+        setStatus("QR code found: " + value + " — analyzing it now…", "good");
+
+        if (typeof scanForm.requestSubmit === "function") {
+            scanForm.requestSubmit();
+        } else {
+            scanForm.dispatchEvent(new Event("submit", { cancelable: true }));
+        }
+    }
+
+    // ---- Upload a photo ----
+    uploadBtn.addEventListener("click", function () {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async function () {
+        const file = fileInput.files && fileInput.files[0];
+        fileInput.value = "";
+
+        if (!file) return;
+
+        if (!file.type.startsWith("image/")) {
+            setStatus("Please choose an image file.", "warn");
+            return;
+        }
+
+        setStatus("Reading QR code…");
+
+        const objectUrl = URL.createObjectURL(file);
+
+        try {
+            const image = await new Promise(function (resolve, reject) {
+                const img = new Image();
+                img.onload = function () { resolve(img); };
+                img.onerror = function () { reject(new Error("That image could not be opened.")); };
+                img.src = objectUrl;
+            });
+
+            let found = null;
+
+            // Large photos sometimes decode better when reduced in size.
+            for (const side of [1600, 1000, 600]) {
+                const canvas = drawScaled(image, image.naturalWidth, image.naturalHeight, side);
+                found = await decodeCanvas(canvas);
+                if (found) break;
+            }
+
+            if (found) {
+                handleQrText(found);
+            } else {
+                setStatus(
+                    "No QR code was found in that photo. Try a clearer, closer picture with the whole code visible.",
+                    "warn"
+                );
+            }
+        } catch (error) {
+            setStatus(error.message || "Could not read that image.", "warn");
+        } finally {
+            URL.revokeObjectURL(objectUrl);
+        }
+    });
+
+    // ---- Live camera ----
+    function stopCamera() {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+
+        if (stream) {
+            stream.getTracks().forEach(function (track) { track.stop(); });
+            stream = null;
+        }
+
+        if (video) video.srcObject = null;
+        if (panel) panel.hidden = true;
+    }
+
+    async function tick() {
+        if (!stream || busy) return;
+
+        busy = true;
+
+        try {
+            if (video.readyState >= 2 && video.videoWidth) {
+                const canvas = drawScaled(video, video.videoWidth, video.videoHeight, 720);
+                const found = await decodeCanvas(canvas);
+
+                if (found) {
+                    handleQrText(found);
+                    busy = false;
+                    return;
+                }
+            }
+        } catch (error) {
+            setStatus(error.message || "Could not read the camera image.", "warn");
+            stopCamera();
+            busy = false;
+            return;
+        }
+
+        busy = false;
+
+        if (stream) {
+            timer = setTimeout(tick, 200);
+        }
+    }
+
+    cameraBtn.addEventListener("click", async function () {
+        if (stream) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setStatus(
+                "The camera is not available here. Use “Upload QR Photo” instead (the camera needs a secure https page).",
+                "warn"
+            );
+            return;
+        }
+
+        try {
+            setStatus("Starting camera…");
+
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: "environment" } },
+                audio: false,
+            });
+
+            video.srcObject = stream;
+            await video.play();
+
+            panel.hidden = false;
+            setStatus("Camera on — point it at a QR code.");
+
+            if (!nativeDetector) {
+                await loadJsQR();
+            }
+
+            tick();
+        } catch (error) {
+            stopCamera();
+
+            setStatus(
+                error && error.name === "NotAllowedError"
+                    ? "Camera permission was denied. Allow camera access in your browser, or upload a photo instead."
+                    : "Could not start the camera. You can upload a photo of the QR code instead.",
+                "warn"
+            );
+        }
+    });
+
+    if (stopBtn) {
+        stopBtn.addEventListener("click", function () {
+            stopCamera();
+            setStatus("Camera stopped.");
+        });
+    }
+
+    window.addEventListener("pagehide", stopCamera);
+    document.addEventListener("visibilitychange", function () {
+        if (document.hidden) stopCamera();
+    });
 })();
