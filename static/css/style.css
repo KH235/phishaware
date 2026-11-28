@@ -4643,3 +4643,299 @@ body {
 #security-quiz .quiz-pdf-name:focus {
     border-color: #00ff88;
 }
+
+
+
+/* ==========================================
+   URL SCANNER — QR CODE SCANNING
+   ========================================== */
+
+.qr-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0 12px;
+}
+
+.qr-label {
+    color: #aeb8c5;
+    font-size: 13px;
+}
+
+.qr-btn {
+    padding: 10px 16px;
+    background: rgba(160, 110, 255, 0.12);
+    color: #c59bff;
+    border: 1px solid #a66eff;
+    border-radius: 8px;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.qr-btn:hover {
+    background: rgba(160, 110, 255, 0.26);
+}
+
+.qr-camera-panel[hidden],
+.qr-status[hidden] {
+    display: none !important;
+}
+
+.qr-camera-panel {
+    margin: 0 0 14px;
+    padding: 14px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+}
+
+.qr-camera-panel video {
+    display: block;
+    width: 100%;
+    max-width: 420px;
+    margin-bottom: 10px;
+    background: #000;
+    border-radius: 8px;
+}
+
+.qr-status {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #344253;
+    background: #10151d;
+    color: #d3d9e3;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.qr-status.good {
+    color: #00ff88;
+    border-color: #00ff88;
+}
+
+.qr-status.warn {
+    color: #ffd27a;
+    border-color: #ffbe3c;
+}
+
+
+/* ==========================================
+   INCIDENT REPORTS — CHART + "ME TOO"
+   ========================================== */
+
+.incident-chart-panel {
+    margin: 0 20px 24px;
+    padding: 20px;
+    background: #10151d;
+    border: 1px solid #344253;
+    border-radius: 10px;
+}
+
+.incident-chart-panel h3 {
+    margin: 0 0 6px;
+    color: #c59bff;
+    font-size: 16px;
+}
+
+.incident-chart {
+    margin-top: 12px;
+}
+
+.incident-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-family: Consolas, monospace;
+}
+
+.incident-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    color: #d3d9e3;
+    font-size: 12px;
+}
+
+.incident-chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.incident-chart-legend i {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.incident-type-tag {
+    display: inline-block;
+    margin-right: 10px;
+    padding: 2px 9px;
+    border: 1px solid #ffbe3c;
+    border-radius: 20px;
+    background: rgba(255, 190, 60, 0.08);
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.community-post-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.metoo-btn {
+    padding: 8px 14px;
+    background: rgba(255, 190, 60, 0.08);
+    color: #ffd27a;
+    border: 1px solid #ffbe3c;
+    border-radius: 20px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.metoo-btn:hover:not(:disabled) {
+    background: rgba(255, 190, 60, 0.2);
+}
+
+.metoo-btn.active {
+    background: #ffbe3c;
+    color: #1b1405;
+}
+
+.metoo-btn:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.metoo-count {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+
+/* ==========================================
+   SPOT THE PHISH — DAILY CHALLENGE + LEADERBOARD
+   ========================================== */
+
+.daily-panel {
+    margin: 0 20px 28px;
+    padding: 20px;
+    background: rgba(17, 22, 35, 0.75);
+    border: 1px solid rgba(160, 110, 255, 0.35);
+    border-radius: 12px;
+}
+
+.daily-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.daily-head h4 {
+    margin: 0;
+    color: #c59bff;
+    font-size: 17px;
+}
+
+.daily-streak {
+    padding: 8px 14px;
+    background: rgba(255, 150, 60, 0.1);
+    border: 1px solid #ff9a3c;
+    border-radius: 20px;
+    color: #ffc58a;
+    font-size: 13px;
+}
+
+.daily-streak strong {
+    color: #ff9a3c;
+    font-size: 18px;
+    font-family: Consolas, monospace;
+}
+
+.daily-progress {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 14px 0;
+    color: #aeb8c5;
+    font-size: 13px;
+}
+
+.daily-progress-bar {
+    flex: 1;
+    height: 10px;
+    background: #1c2432;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.daily-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #38bdf8);
+    transition: width 0.35s ease;
+}
+
+.daily-complete[hidden] {
+    display: none !important;
+}
+
+.daily-complete {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: rgba(0, 255, 136, 0.08);
+    border: 1px solid #00ff88;
+    border-radius: 9px;
+    color: #00ff88;
+    font-size: 14px;
+}
+
+.daily-list {
+    margin: 0 0 22px;
+}
+
+.leaderboard {
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px dashed #344253;
+}
+
+.leaderboard h4 {
+    margin: 0 0 12px;
+    color: #ffd27a;
+}
+
+.leaderboard-me td {
+    background: rgba(0, 255, 136, 0.07);
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.spot-practice-heading {
+    margin: 0 20px 4px;
+    color: #c59bff;
+    font-size: 17px;
+}
+
+#spot-the-phish .spot-practice-note {
+    margin: 0 20px 14px;
+}
