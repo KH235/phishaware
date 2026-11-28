@@ -329,6 +329,37 @@
 
                 </p>
 
+                <!-- QR CODE SCANNING -->
+                <div class="qr-tools">
+                    <span class="qr-label">Or scan a QR code:</span>
+
+                    <button type="button" id="qr-upload-btn" class="qr-btn">
+                        🖼 Upload QR Photo
+                    </button>
+
+                    <button type="button" id="qr-camera-btn" class="qr-btn">
+                        📷 Use Camera
+                    </button>
+
+                    <input type="file" id="qr-file" accept="image/*" hidden>
+                </div>
+
+                <div id="qr-camera-panel" class="qr-camera-panel" hidden>
+                    <video id="qr-video" playsinline muted></video>
+                    <p class="subtle">Point the camera at a QR code. It scans automatically.</p>
+                    <button type="button" id="qr-camera-stop" class="qr-btn">
+                        ✕ Stop Camera
+                    </button>
+                </div>
+
+                <p id="qr-status" class="qr-status" aria-live="polite" hidden></p>
+
+                <p class="subtle">
+                    QR codes are read inside your browser — the photo or
+                    camera image never leaves your device. Only the web
+                    address found inside is analyzed.
+                </p>
+
                 <div
 
                     id="scan-result"
@@ -1251,6 +1282,14 @@
 
                 <!-- Only shown when "I experienced an incident" is selected -->
                 <div class="incident-date-field" data-incident-category="{{ incident_category }}" hidden>
+                    <label for="community-incident-type">Incident Type</label>
+                    <select id="community-incident-type" name="incident_type" class="incident-type-select">
+                        <option value="">Select incident type</option>
+                        {% for kind in incident_types %}
+                        <option value="{{ kind }}">{{ kind }}</option>
+                        {% endfor %}
+                    </select>
+
                     <label for="community-incident-date">
                         Incident Date <span class="optional-tag">(optional)</span>
                     </label>
@@ -1295,6 +1334,18 @@
         </div>
     </details>
 
+    <div class="incident-chart-panel">
+        <h3>📊 Incident Types per Month</h3>
+        <p class="subtle">
+            Incident posts from the last 6 months, grouped by type
+            (by incident date when given, otherwise the posting date).
+        </p>
+
+        <div id="incident-chart" class="incident-chart"></div>
+
+        <script id="incident-chart-data" type="application/json">{{ incident_chart|tojson }}</script>
+    </div>
+
     <div class="community-posts-feed">
 
         <h3>✦ Latest Posts</h3>
@@ -1325,9 +1376,14 @@
 
             <h4 class="community-post-title">{{ post.title }}</h4>
 
-            {% if post.category == incident_category and post.incident_date %}
+            {% if post.category == incident_category %}
             <div class="incident-date-line">
+                {% if post.incident_type %}
+                <span class="incident-type-tag">{{ post.incident_type }}</span>
+                {% endif %}
+                {% if post.incident_date %}
                 📅 Incident date: {{ post.incident_date.strftime('%d %b %Y') }}
+                {% endif %}
             </div>
             {% endif %}
 
@@ -1337,6 +1393,23 @@
                 <span>
                     🕒 {{ post.created_at.strftime('%d %b %Y, %I:%M %p') if post.created_at else '' }}
                 </span>
+
+                {% if post.category == incident_category %}
+                <button
+                    type="button"
+                    class="metoo-btn {% if post.me_too_by_me %}active{% endif %}"
+                    data-url="{{ url_for('toggle_me_too', post_id=post.post_id) }}"
+                    aria-pressed="{{ 'true' if post.me_too_by_me else 'false' }}"
+                    {% if not current_user.is_authenticated %}
+                    disabled title="Log in to use this button"
+                    {% elif is_owner %}
+                    disabled title="You cannot add this to your own incident"
+                    {% endif %}
+                >
+                    🙋 This happened to me too
+                    <span class="metoo-count">{{ post.me_too_count }}</span>
+                </button>
+                {% endif %}
             </div>
 
             <!-- EDIT / DELETE: only visible to the post owner -->
@@ -1383,6 +1456,21 @@
                             data-incident-category="{{ incident_category }}"
                             {% if post.category != incident_category %}hidden{% endif %}
                         >
+                            <label for="edit-incident-type-{{ post.post_id }}">Incident Type</label>
+                            <select
+                                id="edit-incident-type-{{ post.post_id }}"
+                                name="incident_type"
+                                class="incident-type-select"
+                            >
+                                <option value="">Select incident type</option>
+                                {% for kind in incident_types %}
+                                <option
+                                    value="{{ kind }}"
+                                    {% if post.incident_type == kind %}selected{% endif %}
+                                >{{ kind }}</option>
+                                {% endfor %}
+                            </select>
+
                             <label for="edit-incident-date-{{ post.post_id }}">
                                 Incident Date <span class="optional-tag">(optional)</span>
                             </label>
@@ -2187,6 +2275,39 @@
      MODULE 5 — SPOT THE PHISH
      ========================================== -->
 
+{% macro spot_mock(sc) %}
+            {% if sc.scenario_type == 'Email' %}
+
+            <div class="spot-mock spot-email">
+                <div class="spot-row"><b>From:</b> {{ sc.sender }}</div>
+                {% if sc.subject %}
+                <div class="spot-row"><b>Subject:</b> {{ sc.subject }}</div>
+                {% endif %}
+                <div class="spot-body">{{ sc.body }}</div>
+            </div>
+
+            {% elif sc.scenario_type == 'SMS' %}
+
+            <div class="spot-mock spot-sms">
+                <div class="spot-sms-from">{{ sc.sender }}</div>
+                <div class="spot-sms-bubble">{{ sc.body }}</div>
+            </div>
+
+            {% else %}
+
+            <div class="spot-mock spot-login">
+                <div class="spot-browser-bar">🔒 {{ sc.sender }}</div>
+                <div class="spot-login-page">
+                    <div class="spot-body">{{ sc.body }}</div>
+                    <input type="text" placeholder="Email or username" disabled>
+                    <input type="password" placeholder="Password" disabled>
+                    <button type="button" disabled>Sign in</button>
+                </div>
+            </div>
+
+            {% endif %}
+{% endmacro %}
+
 {% macro scenario_fields(s=none) %}
     <label>Title (shown to players)</label>
     <input
@@ -2298,6 +2419,178 @@
     </p>
     {% endif %}
 
+    <!-- DAILY CHALLENGE -->
+    <div class="daily-panel" id="spot-daily">
+
+        <div class="daily-head">
+            <h4>📅 Daily Challenge — {{ spot_daily.date_label if spot_daily.enabled else 'Today' }}</h4>
+
+            {% if current_user.is_authenticated %}
+            <div class="daily-streak">
+                🔥 <strong id="daily-streak-now">{{ spot_daily.streak or 0 }}</strong>
+                day streak
+                <span class="subtle">(best <span id="daily-best">{{ spot_daily.best or 0 }}</span>)</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if spot_daily.enabled %}
+
+        <p class="subtle">
+            Everyone gets the same {{ spot_daily.total }} scenarios today.
+            You have one answer per scenario, with no retries. Finish them
+            all to extend your streak. A new set unlocks every day at
+            midnight (UTC+8).
+        </p>
+
+        {% if current_user.is_authenticated %}
+
+        <div class="daily-progress">
+            <div class="daily-progress-bar">
+                <div
+                    id="daily-bar"
+                    class="daily-progress-fill"
+                    style="width: {{ (spot_daily.answered * 100 / spot_daily.total)|round|int }}%"
+                ></div>
+            </div>
+            <span>
+                <b id="daily-answered">{{ spot_daily.answered }}</b> /
+                {{ spot_daily.total }} answered
+            </span>
+        </div>
+
+        <div
+            id="daily-complete"
+            class="daily-complete"
+            {% if not spot_daily.completed %}hidden{% endif %}
+        >
+            🎉 Challenge complete! Today's score:
+            <b id="daily-score">{{ spot_daily.correct }}</b> / {{ spot_daily.total }}.
+            Come back tomorrow to keep your streak going.
+        </div>
+
+        <div class="spot-list daily-list">
+
+            {% for sc in spot_daily.scenarios %}
+
+            <article
+                class="spot-card daily-card {% if sc.answered %}{{ 'answered-right' if sc.is_correct else 'answered-wrong' }}{% endif %}"
+                data-answer-url="{{ url_for('answer_daily_scenario', scenario_id=sc.scenario_id) }}"
+            >
+
+                <div class="spot-card-top">
+                    <span class="spot-type">
+                        {% if sc.scenario_type == 'Email' %}✉{% elif sc.scenario_type == 'SMS' %}💬{% else %}🌐{% endif %}
+                        {{ sc.scenario_type }}
+                    </span>
+                    <span class="spot-card-number">Challenge {{ loop.index }} of {{ spot_daily.total }}</span>
+                </div>
+
+                <h4 class="spot-title">{{ sc.title }}</h4>
+
+                {{ spot_mock(sc) }}
+
+                <div class="spot-choices">
+                    <button
+                        type="button"
+                        class="spot-choice spot-choice-phish {% if sc.answered and sc.user_answer %}picked{% endif %}"
+                        data-answer="phishing"
+                        {% if sc.answered %}disabled{% endif %}
+                    >🎣 It's Phishing</button>
+                    <button
+                        type="button"
+                        class="spot-choice spot-choice-legit {% if sc.answered and not sc.user_answer %}picked{% endif %}"
+                        data-answer="legit"
+                        {% if sc.answered %}disabled{% endif %}
+                    >✅ It's Legitimate</button>
+                </div>
+
+                <div class="spot-result" {% if not sc.answered %}hidden{% endif %}>
+                    <div class="spot-verdict {{ 'good' if sc.is_correct else 'bad' }}">
+                        {% if sc.answered %}
+                        {{ '✓ Correct! ' if sc.is_correct else '✗ Not quite. ' }}{{ 'This was a phishing attempt.' if sc.is_phishing else 'This one was legitimate.' }}
+                        {% endif %}
+                    </div>
+                    <ul class="spot-flags">
+                        {% for flag in sc.flags %}
+                        <li>{{ flag }}</li>
+                        {% endfor %}
+                    </ul>
+                    <p class="spot-saved subtle">{% if sc.answered %}Answer locked in for today.{% endif %}</p>
+                </div>
+
+            </article>
+
+            {% endfor %}
+
+        </div>
+
+        {% else %}
+
+        <p class="subtle">
+            <a href="{{ url_for('login') }}">Login</a> or
+            <a href="{{ url_for('register') }}">Sign Up</a>
+            to play the daily challenge and build your streak.
+        </p>
+
+        {% endif %}
+
+        {% else %}
+
+        <p class="subtle">
+            The daily challenge starts as soon as an administrator adds scenarios.
+        </p>
+
+        {% endif %}
+
+        <!-- LEADERBOARD -->
+        <div class="leaderboard">
+            <h4>🏆 Top 10 — Longest Active Streaks</h4>
+
+            {% if spot_leaderboard %}
+            <div class="spot-history-table-wrap">
+                <table class="spot-history-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Player</th>
+                            <th>🔥 Streak</th>
+                            <th>Total correct</th>
+                            <th>Today</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in spot_leaderboard %}
+                        <tr {% if row.is_me %}class="leaderboard-me"{% endif %}>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ row.username }}{% if row.is_me %} (you){% endif %}</td>
+                            <td>{{ row.streak }} day{{ '' if row.streak == 1 else 's' }}</td>
+                            <td>{{ row.total_correct }}</td>
+                            <td>{{ row.today_score or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="subtle">
+                Ranked by current streak, then total correct answers. Finish
+                today's challenge to keep your streak alive.
+            </p>
+            {% else %}
+            <p class="community-no-comments">
+                No active streaks yet. Be the first to finish today's challenge!
+            </p>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <h4 class="spot-practice-heading">🎯 Practice Mode</h4>
+    <p class="subtle spot-practice-note">
+        Free play — retry any scenario as often as you like. Practice does
+        not affect your streak or the leaderboard.
+    </p>
+
     <!-- SCENARIOS -->
     {% if spot_scenarios %}
 
@@ -2327,37 +2620,7 @@
 
             <h4 class="spot-title">{{ sc.title }}</h4>
 
-            <!-- The "fake" message the player must judge -->
-            {% if sc.scenario_type == 'Email' %}
-
-            <div class="spot-mock spot-email">
-                <div class="spot-row"><b>From:</b> {{ sc.sender }}</div>
-                {% if sc.subject %}
-                <div class="spot-row"><b>Subject:</b> {{ sc.subject }}</div>
-                {% endif %}
-                <div class="spot-body">{{ sc.body }}</div>
-            </div>
-
-            {% elif sc.scenario_type == 'SMS' %}
-
-            <div class="spot-mock spot-sms">
-                <div class="spot-sms-from">{{ sc.sender }}</div>
-                <div class="spot-sms-bubble">{{ sc.body }}</div>
-            </div>
-
-            {% else %}
-
-            <div class="spot-mock spot-login">
-                <div class="spot-browser-bar">🔒 {{ sc.sender }}</div>
-                <div class="spot-login-page">
-                    <div class="spot-body">{{ sc.body }}</div>
-                    <input type="text" placeholder="Email or username" disabled>
-                    <input type="password" placeholder="Password" disabled>
-                    <button type="button" disabled>Sign in</button>
-                </div>
-            </div>
-
-            {% endif %}
+            {{ spot_mock(sc) }}
 
             <!-- Player controls -->
             <div class="spot-choices">
