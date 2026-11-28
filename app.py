@@ -1,13 +1,23 @@
+import io
 import ipaddress
 import json
 import os
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from flask_wtf.csrf import CSRFProtect
 
 from dotenv import load_dotenv
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -3021,6 +3031,354 @@ def submit_security_quiz():
 
         if connection is not None and connection.is_connected():
             connection.close()
+
+
+# ==========================================
+# MODULE 8 — QUIZ RESULT PDF
+# ==========================================
+
+PDF_FONT_CANDIDATES = [
+    (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
+    (
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    ),
+]
+
+
+def build_quiz_pdf(name, taken_at, score, total, percentage, review_items):
+    """
+    Build the quiz result PDF and return its bytes.
+
+    review_items: one dict per question the user got wrong or skipped:
+        number, question, your_answer, correct_answer, explanation
+    """
+    # reportlab is imported here so the rest of the site keeps working
+    # even if the package is missing.
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import (
+        HRFlowable,
+        KeepTogether,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    # Prefer DejaVu (full Unicode) when the server has it; otherwise use the
+    # built-in Helvetica and replace characters it cannot draw.
+    font, bold, unicode_ok = "Helvetica", "Helvetica-Bold", False
+
+    for regular_path, bold_path in PDF_FONT_CANDIDATES:
+        if os.path.exists(regular_path) and os.path.exists(bold_path):
+            try:
+                pdfmetrics.registerFont(TTFont("PA-Sans", regular_path))
+                pdfmetrics.registerFont(TTFont("PA-Sans-Bold", bold_path))
+                pdfmetrics.registerFontFamily(
+                    "PA-Sans",
+                    normal="PA-Sans",
+                    bold="PA-Sans-Bold",
+                    italic="PA-Sans",
+                    boldItalic="PA-Sans-Bold",
+                )
+                font, bold, unicode_ok = "PA-Sans", "PA-Sans-Bold", True
+                break
+            except Exception:
+                app.logger.exception("Could not load PDF font")
+
+    def clean(text):
+        text = str(text or "")
+
+        if not unicode_ok:
+            text = text.encode("cp1252", "replace").decode("cp1252")
+
+        return escape(text).replace("\n", "<br/>")
+
+    green = colors.HexColor("#0a8f55")
+    red = colors.HexColor("#c62839")
+    grey = colors.HexColor("#5b6574")
+    ink = colors.HexColor("#1b2330")
+
+    brand_style = ParagraphStyle(
+        "brand", fontName=bold, fontSize=10, textColor=green, leading=12
+    )
+    title_style = ParagraphStyle(
+        "title", fontName=bold, fontSize=22, textColor=ink, leading=27
+    )
+    label_style = ParagraphStyle(
+        "label", fontName=font, fontSize=8.5, textColor=grey, leading=11
+    )
+    value_style = ParagraphStyle(
+        "value", fontName=bold, fontSize=12, textColor=ink, leading=15
+    )
+    score_style = ParagraphStyle(
+        "score", fontName=bold, fontSize=17, textColor=green, leading=21
+    )
+    heading_style = ParagraphStyle(
+        "heading", fontName=bold, fontSize=13, textColor=ink,
+        leading=17, spaceBefore=6, spaceAfter=8,
+    )
+    question_style = ParagraphStyle(
+        "question", fontName=bold, fontSize=10.5, textColor=ink, leading=14
+    )
+    body_style = ParagraphStyle(
+        "body", fontName=font, fontSize=9.5, textColor=ink,
+        leading=13, leftIndent=10, spaceBefore=3,
+    )
+    praise_style = ParagraphStyle(
+        "praise", fontName=font, fontSize=11, textColor=green, leading=15
+    )
+
+    if percentage >= 80:
+        rating = "Excellent"
+    elif percentage >= 60:
+        rating = "Good"
+    else:
+        rating = "Needs more practice"
+
+    info = Table(
+        [
+            [
+                Paragraph("NAME", label_style),
+                Paragraph("DATE", label_style),
+                Paragraph("SCORE", label_style),
+            ],
+            [
+                Paragraph(clean(name), value_style),
+                Paragraph(clean(taken_at), value_style),
+                Paragraph(f"{score} / {total} ({percentage}%)", score_style),
+            ],
+            [
+                "",
+                "",
+                Paragraph(clean(rating), label_style),
+            ],
+        ],
+        colWidths=[54 * mm, 62 * mm, 58 * mm],
+    )
+    info.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#d3d9e2")),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f5f7fa")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, 0), 8),
+                ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
+            ]
+        )
+    )
+
+    story = [
+        Paragraph("PHISHAWARE", brand_style),
+        Paragraph("Security Quiz Result", title_style),
+        Spacer(1, 8),
+        info,
+        Spacer(1, 14),
+    ]
+
+    if review_items:
+        story.append(
+            Paragraph(
+                f"Questions to review ({len(review_items)})", heading_style
+            )
+        )
+
+        for item in review_items:
+            your = item["your_answer"]
+
+            block = [
+                Paragraph(
+                    f"Q{item['number']}. {clean(item['question'])}",
+                    question_style,
+                ),
+                Paragraph(
+                    f'<font color="#c62839"><b>Your answer:</b> '
+                    f"{clean(your) if your else 'Not answered'}</font>",
+                    body_style,
+                ),
+                Paragraph(
+                    f'<font color="#0a8f55"><b>Correct answer:</b> '
+                    f"{clean(item['correct_answer'])}</font>",
+                    body_style,
+                ),
+                Paragraph(
+                    f"<b>Explanation:</b> {clean(item['explanation'])}",
+                    body_style,
+                ),
+                Spacer(1, 6),
+                HRFlowable(
+                    width="100%", thickness=0.5,
+                    color=colors.HexColor("#d3d9e2"),
+                ),
+                Spacer(1, 8),
+            ]
+
+            story.append(KeepTogether(block))
+    else:
+        story.append(
+            Paragraph(
+                "Perfect score! You answered every question correctly, "
+                "so there is nothing to review.",
+                praise_style,
+            )
+        )
+
+    def draw_footer(canvas, document):
+        canvas.saveState()
+        canvas.setFont(font, 8)
+        canvas.setFillColor(grey)
+        canvas.drawString(
+            18 * mm, 10 * mm, "Generated by PhishAware"
+        )
+        canvas.drawRightString(
+            A4[0] - 18 * mm, 10 * mm, f"Page {document.page}"
+        )
+        canvas.restoreState()
+
+    buffer = io.BytesIO()
+
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
+        title="PhishAware Security Quiz Result",
+        author="PhishAware",
+    )
+
+    document.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+
+    return buffer.getvalue()
+
+
+@app.post("/quiz/result-pdf")
+@limiter.limit("20 per minute")
+def download_quiz_result_pdf():
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("answers"), dict
+    ):
+        return jsonify(success=False, message="Invalid quiz answers."), 400
+
+    answers = payload["answers"]
+
+    if current_user.is_authenticated:
+        name = current_user.username
+    else:
+        name = str(payload.get("name") or "").strip()[:60] or "Guest"
+
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                question_id, question_text,
+                option_a, option_b, option_c, option_d,
+                correct_answer, explanation
+            FROM quiz_questions
+            ORDER BY question_id ASC
+            LIMIT 50
+            """
+        )
+
+        questions = cursor.fetchall()
+
+    except Error:
+        app.logger.exception("Failed to load quiz questions for PDF")
+        return jsonify(
+            success=False, message="Unable to create the PDF. Please try again."
+        ), 500
+
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    if not questions:
+        return jsonify(
+            success=False, message="No quiz questions are available."
+        ), 400
+
+    score = 0
+    review_items = []
+
+    for number, question in enumerate(questions, start=1):
+        selected = answers.get(str(question["question_id"]), "")
+
+        if selected not in ("A", "B", "C", "D"):
+            selected = None
+
+        correct = question["correct_answer"]
+
+        if selected == correct:
+            score += 1
+            continue
+
+        def option_text(letter):
+            return f"{letter}. {question['option_' + letter.lower()]}"
+
+        review_items.append(
+            {
+                "number": number,
+                "question": question["question_text"],
+                "your_answer": option_text(selected) if selected else None,
+                "correct_answer": option_text(correct),
+                "explanation": question["explanation"],
+            }
+        )
+
+    total = len(questions)
+    percentage = round(score * 100 / total)
+
+    # Malaysia time (UTC+8, no daylight saving).
+    taken_at = datetime.now(timezone(timedelta(hours=8))).strftime(
+        "%d %b %Y, %I:%M %p (UTC+8)"
+    )
+
+    try:
+        pdf_bytes = build_quiz_pdf(
+            name, taken_at, score, total, percentage, review_items
+        )
+    except ImportError:
+        app.logger.exception("reportlab is not installed")
+        return jsonify(
+            success=False, message="PDF export is not available right now."
+        ), 500
+    except Exception:
+        app.logger.exception("Failed to build quiz PDF")
+        return jsonify(
+            success=False, message="Unable to create the PDF. Please try again."
+        ), 500
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"PhishAware-Quiz-Result-{datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d')}.pdf",
+    )
 
 
 if __name__ == '__main__':
